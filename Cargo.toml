@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "lib/chessboard",
+    "lib/cb-srv-con",
+    "bin/cb-gui",
+    "bin/cb-tui",
+    "bin/cb-srv",
+]
