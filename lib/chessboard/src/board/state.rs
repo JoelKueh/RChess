@@ -1,6 +1,4 @@
 
-use crate::board::bitboard;
-
 pub const INIT_BOARD_STATE: u16 = 0;
 pub const ENP_COL: u16          = 0b11100000;
 pub const PID_COL: u16          = 0b11100000;
@@ -13,9 +11,9 @@ pub const HALFMOVE_FIFTY: u16   = 50 << 8;
 /// moves. The bit ordering of the raw data is as follows.
 ///
 /// Bits 13 - 8 : HALFMOVE_CLOCK
-/// Bit       7 : ENP_AVAILABILITY
-/// Bits  6 - 4 : ENP_COLUMN | CAPTURED_PIECE_ID
-///
+/// Bits  7 - 5 : ENP_COLUMN | CAPTURED_PIECE_ID
+/// Bit       4 : ENP_AVAILABILITY
+/// Bits  3 - 0 : CASTLE_RIGHTS
 pub struct State {
     data: u16
 }

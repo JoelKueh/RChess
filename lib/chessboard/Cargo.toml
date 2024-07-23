@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+arr_macro = "0.2.1"
 bitintr = "0.3.0"
 
 [build-dependencies]
