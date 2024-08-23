@@ -1,20 +1,27 @@
 
-use crate::board::bitboard;
+use crate::board::EMPTY;
 
-pub const WHITE_KING_START: u32                 = 60;
-pub const WHITE_KING_SIDE_ROOK_START: u32       = 63;
-pub const WHITE_QUEEN_SIDE_ROOK_START: u32      = 56;
-pub const WHITE_KING_SIDE_CASTLE_TARGET: u32    = 62;
-pub const WHITE_QUEEN_SIDE_CASTLE_TARGET: u32   = 58;
+pub const WHITE_KING_START: u8                 = 60;
+pub const WHITE_KING_SIDE_ROOK_START: u8       = 63;
+pub const WHITE_QUEEN_SIDE_ROOK_START: u8      = 56;
+pub const WHITE_KING_SIDE_CASTLE_TARGET: u8    = 62;
+pub const WHITE_KING_SIDE_ROOK_TARGET: u8      = 61;
+pub const WHITE_QUEEN_SIDE_CASTLE_TARGET: u8   = 58;
+pub const WHITE_QUEEN_SIDE_ROOK_TARGET: u8     = 59;
 
-pub const BLACK_KING_START: u32                 = 4;
-pub const BLACK_KING_SIDE_ROOK_START: u32       = 7;
-pub const BLACK_QUEEN_SIDE_ROOK_START: u32      = 0;
-pub const BLACK_KING_SIDE_CASTLE_TARGET: u32    = 6;
-pub const BLACK_QUEEN_SIDE_CASTLE_TARGET: u32   = 2;
+pub const BLACK_KING_START: u8                 = 4;
+pub const BLACK_KING_SIDE_ROOK_START: u8       = 7;
+pub const BLACK_QUEEN_SIDE_ROOK_START: u8      = 0;
+pub const BLACK_KING_SIDE_CASTLE_TARGET: u8    = 6;
+pub const BLACK_KING_SIDE_ROOK_TARGET: u8      = 5;
+pub const BLACK_QUEEN_SIDE_CASTLE_TARGET: u8   = 2;
+pub const BLACK_QUEEN_SIDE_ROOK_TARGET: u8     = 3;
+
+pub const WHITE_MIN_ENPASSANT_TARGET: u8 = 40;
+pub const BLACK_MIN_ENPASSANT_TARGET: u8 = 16;
 
 pub struct Mailbox {
-    data: [u8; 64]
+    pub data: [u8; 64]
 }
 
 impl Mailbox {
@@ -27,6 +34,12 @@ impl Mailbox {
     /// Gets the PID given the number of the square.
     /// The index of the square is relative to the top left corner seen from white's perspective.
     pub fn at_sq(&self, sq: u8) -> u8 {
-        return self.data[sq as usize].clone();
+        return self.data[sq as usize];
+    }
+
+    pub fn new_empty() -> Self {
+        Mailbox {
+            data: [EMPTY as u8; 64]
+        }
     }
 }

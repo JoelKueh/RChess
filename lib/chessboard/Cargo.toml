@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 arr_macro = "0.2.1"
 bitintr = "0.3.0"
+colored = "2.1.0"
 
 [build-dependencies]
 cc = "1.1.6"

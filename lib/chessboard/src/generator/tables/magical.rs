@@ -176,20 +176,22 @@ pub fn gen_rook_attack_table() -> [MagicalTable; 64] {
     gen_table(false)
 }
 
-pub unsafe fn read_magical_table(table: &MagicalTable, occupancy: u64) -> u64 {
+pub fn read_magical_table(table: &MagicalTable, occupancy: u64) -> u64 {
     let key: u16 = get_key(&table, occupancy);
-    return *table.data.get_unchecked(key as usize);
+    return table.data[key as usize];
 }
 
-unsafe fn get_key(table: &MagicalTable, mut occupancy: u64) -> u16 {
+fn get_key(table: &MagicalTable, mut occupancy: u64) -> u16 {
     occupancy &= table.occupancy_mask;
-    return ((Wrapping(occupancy) * Wrapping(table.magic)).0 >> 64 - table.num_bits) as u16;
+    occupancy = (Wrapping(occupancy) * Wrapping(table.magic)).0;
+    occupancy >>= 64 - table.num_bits;
+    return occupancy as u16;
 }
 
 fn get_rook_occ_mask(sq: u8) -> u64 {
     let mut result: u64 = 0u64;
-    let source_rank: u8 = sq / 8;
-    let source_file: u8 = sq % 8;
+    let source_rank: i8 = (sq / 8).try_into().unwrap();
+    let source_file: i8 = (sq % 8).try_into().unwrap();
 
     // Down
     let mut rank = source_rank + 1;
@@ -213,7 +215,7 @@ fn get_rook_occ_mask(sq: u8) -> u64 {
     }
 
     // Left
-    let mut file = source_file + 1;
+    let mut file = source_file - 1;
     while file >= 1 {
         result |= 1u64 << file + source_rank * 8;
         file -= 1;
@@ -224,8 +226,8 @@ fn get_rook_occ_mask(sq: u8) -> u64 {
 
 fn get_bishop_occ_mask(sq: u8) -> u64 {
     let mut result: u64 = 0u64;
-    let source_rank: u8 = sq / 8;
-    let source_file: u8 = sq % 8;
+    let source_rank: i8 = (sq / 8).try_into().unwrap();
+    let source_file: i8 = (sq % 8).try_into().unwrap();
 
     // Down-Right
     let mut rank = source_rank + 1;
@@ -240,7 +242,7 @@ fn get_bishop_occ_mask(sq: u8) -> u64 {
     let mut rank = source_rank + 1;
     let mut file = source_file - 1;
     while rank <= 6 && file >= 1 {
-        result |= 1u64 << source_file + rank * 8;
+        result |= 1u64 << file + rank * 8;
         rank += 1;
         file -= 1;
     }
@@ -249,7 +251,7 @@ fn get_bishop_occ_mask(sq: u8) -> u64 {
     let mut rank = source_rank - 1;
     let mut file = source_file + 1;
     while rank >= 1 && file <= 6 {
-        result |= 1u64 << file + source_rank * 8;
+        result |= 1u64 << file + rank * 8;
         rank -= 1;
         file += 1;
     }
@@ -258,7 +260,7 @@ fn get_bishop_occ_mask(sq: u8) -> u64 {
     let mut rank = source_rank - 1;
     let mut file = source_file - 1;
     while rank >= 1 && file >= 1 {
-        result |= 1u64 << file + source_rank * 8;
+        result |= 1u64 << file + rank * 8;
         rank -= 1;
         file -= 1;
     }
@@ -266,15 +268,15 @@ fn get_bishop_occ_mask(sq: u8) -> u64 {
     return result;
 }
 
-fn get_bishop_attack_mask(sq: u8, occupied: u64) -> u64 {
+pub fn get_bishop_attack_mask(sq: u8, occupied: u64) -> u64 {
     let mut result: u64 = 0u64;
-    let source_rank: u8 = sq / 8;
-    let source_file: u8 = sq % 8;
+    let source_rank: i8 = (sq / 8).try_into().unwrap();
+    let source_file: i8 = (sq % 8).try_into().unwrap();
 
     // Down-Right
     let mut rank = source_rank + 1;
     let mut file = source_file + 1;
-    while rank <= 6 && file <= 6 {
+    while rank <= 7 && file <= 7 {
         result |= 1u64 << (file + rank * 8);
         if occupied & (1u64 << (file + rank * 8)) != 0 { break; }
         rank += 1;
@@ -284,8 +286,8 @@ fn get_bishop_attack_mask(sq: u8, occupied: u64) -> u64 {
     // Down-Left
     let mut rank = source_rank + 1;
     let mut file = source_file - 1;
-    while rank <= 6 && file >= 1 {
-        result |= 1u64 << (source_file + rank * 8);
+    while rank <= 7 && file >= 0 {
+        result |= 1u64 << (file + rank * 8);
         if occupied & (1u64 << (file + rank * 8)) != 0 { break; }
         rank += 1;
         file -= 1;
@@ -294,8 +296,8 @@ fn get_bishop_attack_mask(sq: u8, occupied: u64) -> u64 {
     // Up-Right
     let mut rank = source_rank - 1;
     let mut file = source_file + 1;
-    while rank >= 1 && file <= 6 {
-        result |= 1u64 << (file + source_rank * 8);
+    while rank >= 0 && file <= 7 {
+        result |= 1u64 << (file + rank * 8);
         if occupied & (1u64 << (file + rank * 8)) != 0 { break; }
         rank -= 1;
         file += 1;
@@ -304,8 +306,8 @@ fn get_bishop_attack_mask(sq: u8, occupied: u64) -> u64 {
     // Up-Left
     let mut rank = source_rank - 1;
     let mut file = source_file - 1;
-    while rank >= 1 && file >= 1 {
-        result |= 1u64 << (file + source_rank * 8);
+    while rank >= 0 && file >= 0 {
+        result |= 1u64 << (file + rank * 8);
         if occupied & (1u64 << (file + rank * 8)) != 0 { break; }
         rank -= 1;
         file -= 1;
@@ -314,14 +316,14 @@ fn get_bishop_attack_mask(sq: u8, occupied: u64) -> u64 {
     return result;
 }
 
-fn get_rook_attack_mask(sq: u8, occupied: u64) -> u64 {
+pub fn get_rook_attack_mask(sq: u8, occupied: u64) -> u64 {
     let mut result: u64 = 0u64;
-    let source_rank: u8 = sq / 8;
-    let source_file: u8 = sq % 8;
+    let source_rank: i8 = (sq / 8).try_into().unwrap();
+    let source_file: i8 = (sq % 8).try_into().unwrap();
 
     // Down
     let mut rank = source_rank + 1;
-    while rank <= 6 {
+    while rank <= 7 {
         result |= 1u64 << (source_file + rank * 8);
         if occupied & (1u64 << (source_file + rank * 8)) != 0 { break; }
         rank += 1;
@@ -329,7 +331,7 @@ fn get_rook_attack_mask(sq: u8, occupied: u64) -> u64 {
 
     // Up
     let mut rank = source_rank - 1;
-    while rank >= 1 {
+    while rank >= 0 {
         result |= 1u64 << (source_file + rank * 8);
         if occupied & (1u64 << (source_file + rank * 8)) != 0 { break; }
         rank -= 1;
@@ -337,15 +339,15 @@ fn get_rook_attack_mask(sq: u8, occupied: u64) -> u64 {
 
     // Right
     let mut file = source_file + 1;
-    while file <= 6 {
+    while file <= 7 {
         result |= 1u64 << (file + source_rank * 8);
         if occupied & (1u64 << (file + source_rank * 8)) != 0 { break; }
         file += 1;
     }
 
     // Left
-    let mut file = source_file + 1;
-    while file >= 1 {
+    let mut file = source_file - 1;
+    while file >= 0 {
         result |= 1u64 << (file + source_rank * 8);
         if occupied & (1u64 << (file + source_rank * 8)) != 0 { break; }
         file -= 1;
@@ -355,6 +357,7 @@ fn get_rook_attack_mask(sq: u8, occupied: u64) -> u64 {
 }
 
 fn gen_table(is_bishop: bool) -> [MagicalTable; 64] {
+
     let mut legal_moves: [u64; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
     let mut occupied_squares: [u64; MAX_TABLE_SIZE] = [0; MAX_TABLE_SIZE];
 
@@ -401,8 +404,30 @@ fn gen_table(is_bishop: bool) -> [MagicalTable; 64] {
 
         // Remap those sets into the hash table.
         for j in 0..(1 << table.num_bits) {
-            let key: u16 = unsafe { get_key(table, occupied_squares[j]) };
-            table.data[key as usize] = legal_moves[key as usize];
+            let key: u16 = get_key(table, occupied_squares[j]);
+
+            let legal_recalc: u64 = if is_bishop {
+                get_bishop_attack_mask(sq as u8, occupied_squares[j])
+            } else {
+                get_rook_attack_mask(sq as u8, occupied_squares[j])
+            };
+            
+            if table.data[key as usize] != 0 &&
+                table.data[key as usize] != legal_recalc {
+                println!("COLLISION ERROR!");
+                println!("PIECE: {}", if is_bishop { "BISHOP" } else { "ROOK" });
+                println!("SQ: {}", sq);
+                println!("IDX: {}", j);
+                println!("KEY: {}", key);
+                bitboard::print(legal_recalc);
+                println!("");
+                bitboard::print(table.data[key as usize]);
+                println!("");
+                bitboard::print(occupied_squares[j]);
+                panic!();
+            }
+
+            table.data[key as usize] = legal_moves[j as usize];
         }
     }
 

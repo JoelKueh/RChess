@@ -5,5 +5,5 @@ members = [
     "lib/cb-srv-con",
     "bin/cb-gui",
     "bin/cb-tui",
-    "bin/cb-srv",
+    "bin/cb-srv", "bin/cli-debug",
 ]

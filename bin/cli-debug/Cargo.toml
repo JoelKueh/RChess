@@ -1,0 +1,10 @@
+[package]
+name = "cli-debug"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chessboard = { version = "0.1.0", path = "../../lib/chessboard" }
+colored = "2.1.0"
+const_format = "0.2.32"
+crossterm = "0.28.1"

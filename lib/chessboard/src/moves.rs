@@ -1,7 +1,7 @@
 
+#![allow(unused_variables, dead_code)]
+
 use crate::board;
-use crate::board::mailbox;
-use crate::board::bitboard;
 
 pub const QUIET: u16                 =  0 << 12;
 pub const DOUBLE_PAWN_PUSH: u16      =  1 << 12;
@@ -25,7 +25,7 @@ const FLAG_MASK: u16    = 0xF << 12;
 pub const MAX_NUM_MOVES: usize = 218;
 pub const INVALID_MOVE: u16 = 0b0110111111111111;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug)]
 pub struct Move {
     data: u16
 }
@@ -102,12 +102,12 @@ impl Move {
             algbr.insert(0, from_file);
         }
 
-        match start_piece {
-            board::PIECE_TYPE_KNIGHT => algbr.insert(0, 'N'),
-            board::PIECE_TYPE_BISHOP => algbr.insert(0, 'B'),
-            board::PIECE_TYPE_ROOK   => algbr.insert(0, 'R'),
-            board::PIECE_TYPE_QUEEN  => algbr.insert(0, 'Q'),
-            board::PIECE_TYPE_KING   => algbr.insert(0, 'K'),
+        match start_piece as usize {
+            board::KNIGHT => algbr.insert(0, 'N'),
+            board::BISHOP => algbr.insert(0, 'B'),
+            board::ROOK   => algbr.insert(0, 'R'),
+            board::QUEEN  => algbr.insert(0, 'Q'),
+            board::KING   => algbr.insert(0, 'K'),
             _ => ()
         }
 
@@ -151,16 +151,22 @@ impl Move {
             data: flags | (from << 6) | to
         }
     }
+    
+    pub fn from_data(data: u16) -> Move {
+        return Move {
+            data
+        }
+    }
 
     /// Builds the move from a FIDE algebraic string representation of the move.
     pub fn from_short_algbr(algbr: &str, moves: &MoveList) {
         let piece: u8 = match algbr.as_bytes()[0 as usize] as char {
-            'N' => board::PIECE_TYPE_KNIGHT,
-            'B' => board::PIECE_TYPE_BISHOP,
-            'R' => board::PIECE_TYPE_ROOK,
-            'Q' => board::PIECE_TYPE_QUEEN,
-            'K' => board::PIECE_TYPE_KING,
-            _ => board::PIECE_TYPE_PAWN
+            'N' => board::KNIGHT as u8,
+            'B' => board::BISHOP as u8,
+            'R' => board::ROOK as u8,
+            'Q' => board::QUEEN as u8,
+            'K' => board::KING as u8,
+            _ => board::PAWN as u8 
         };
 
         let mut flag: u16 = match algbr.chars().last() {
@@ -172,6 +178,8 @@ impl Move {
         };
 
         flag += if algbr.contains('x') { 4 } else { 0 };
+
+        todo!();
     }
 
     /// Builds the move from a UCI algebraic notation string representation of the move.
@@ -194,7 +202,7 @@ pub struct MoveList {
 impl MoveList {
     pub fn new() -> MoveList {
         return MoveList {
-            moves: [Move { data: INVALID_MOVE }; MAX_NUM_MOVES],
+            moves: core::array::from_fn(|_| Move { data: INVALID_MOVE }),
             head: 0
         }
     }
@@ -217,8 +225,8 @@ impl MoveList {
     ///
     /// The board representation that uses this must guarantee that every possible position must
     /// be a valid position playable from the root posiiton.
-    pub unsafe fn push(&mut self, new_move: Move) {
-        *self.moves[..].get_unchecked_mut(self.head as usize) = new_move;
+    pub fn push(&mut self, new_move: Move) {
+        self.moves[self.head as usize] = new_move;
         self.head += 1;
     }
 
@@ -230,9 +238,9 @@ impl MoveList {
     ///
     /// The board representation that uses this must guarantee that every possible position must
     /// be a valid position playable from the root posiiton.
-    pub unsafe fn pop(&mut self) -> &Move {
+    pub fn pop(&mut self) -> &Move {
         self.head -= 1;
-        self.moves[..].get_unchecked(self.head as usize)
+        &self.moves[self.head as usize]
     }
 
     /// Pops the top element off of the MoveList.
@@ -243,8 +251,7 @@ impl MoveList {
     ///
     /// The board representation that uses this must guarantee that every possible position must
     /// be a valid position playable from the root posiiton.
-    pub unsafe fn at(&self, idx: u8) -> &Move {
-        self.moves[..].get_unchecked(idx as usize)
+    pub fn at(&self, idx: usize) -> &Move {
+        &self.moves[idx as usize]
     }
-
 }
