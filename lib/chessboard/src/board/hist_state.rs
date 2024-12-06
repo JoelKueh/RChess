@@ -1,7 +1,7 @@
 
 use crate::board::*;
 
-pub const INIT_BOARD_STATE: u16 = 0;
+pub const INIT_BOARD_STATE: u16 = 0b0;
 pub const ENP_COL: u16          = 0b11100000;
 pub const PID_COL: u16          = 0b11100000;
 pub const ENP_AVAILABLE: u16    = 0b10000;
@@ -19,6 +19,12 @@ pub const HALFMOVE_FIFTY: u16   = 50 << 8;
 #[derive(Clone)]
 pub struct HistState {
     data: u16
+}
+
+impl Default for HistState {
+    fn default() -> Self {
+        HistState { data: INIT_BOARD_STATE }
+    }
 }
 
 impl HistState {

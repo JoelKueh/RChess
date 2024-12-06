@@ -2,6 +2,7 @@
 #![allow(unused_variables, dead_code)]
 
 use crate::board;
+use std::fmt;
 
 pub const QUIET: u16                 =  0 << 12;
 pub const DOUBLE_PAWN_PUSH: u16      =  1 << 12;
@@ -25,9 +26,63 @@ const FLAG_MASK: u16    = 0xF << 12;
 pub const MAX_NUM_MOVES: usize = 218;
 pub const INVALID_MOVE: u16 = 0b0110111111111111;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
+pub struct MoveSlice(Vec<Move>);
+#[derive(Debug)]
+pub enum MoveDecodeErr {
+    MoveMalformedErr(String),
+    MoveNoMatchesError(String),
+    MoveNotUniqueErr(MoveSlice)
+}
+
+impl fmt::Display for MoveSlice {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.0.len() == 0 {
+            write!(f, "{{}}")?;
+            return Ok(())
+        }
+
+        write!(f, "{{ ")?;
+        for i in 0..(self.0.len() - 1) as usize {
+            write!(f, "{}, ", self.0[i])?;
+        }
+        write!(f, "{}", self.0.last().unwrap())?;
+        write!(f, " }}")?;
+        return Ok(());
+    }
+}
+
+impl fmt::Display for MoveDecodeErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            MoveDecodeErr::MoveMalformedErr(msg) => {
+                write!(f, "invalid move string provided ({})", msg)
+            },
+            MoveDecodeErr::MoveNoMatchesError(msg) => {
+                write!(f, "move ({}) not found in list of legal moves", msg)
+            },
+            MoveDecodeErr::MoveNotUniqueErr(mvvec) => {
+                write!(f, "move is not unique in list of legal moves ({})", mvvec)
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub struct Move {
     data: u16
+}
+
+impl Default for Move {
+    fn default() -> Self {
+        Move { data: INVALID_MOVE }
+    }
+}
+
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.to_long_algbr())
+    }
 }
 
 impl Move {
@@ -183,8 +238,28 @@ impl Move {
     }
 
     /// Builds the move from a UCI algebraic notation string representation of the move.
-    pub fn from_uci_algbr(algbr: &str, moves: &MoveList) {
-        todo!();
+    pub fn from_uci_algbr(algbr: &str, moves: &MoveList) -> Result<Move, MoveDecodeErr> {
+        let mut from: u8 = algbr.chars().nth(0).unwrap() as u8 - 'a' as u8;
+        from += ('8' as u8 - algbr.chars().nth(1).unwrap() as u8) * 8;
+        let mut to: u8 = algbr.chars().nth(2).unwrap() as u8 - 'a' as u8;
+        to += ('8' as u8 - algbr.chars().nth(3).unwrap() as u8) * 8;
+
+        // Find match in the list of legal moves.
+        let mut matching = moves.moves.iter().filter(|&x| {
+            x.get_to() == to && x.get_from() == from
+        });
+
+        // Check if we got at least one item from the match.
+        let Some(mv) = matching.nth(0) else {
+            return Err(MoveDecodeErr::MoveNoMatchesError(algbr.to_string()));
+        };
+
+        // Check if there were too many items.
+        if let Some(extra_mv) = matching.nth(1) {
+            return Err(MoveDecodeErr::MoveNotUniqueErr(MoveSlice(matching.cloned().collect())));
+        };
+
+        return Ok(mv.clone());
     }
 }
 
@@ -197,6 +272,23 @@ impl Move {
 pub struct MoveList {
     moves: [Move; MAX_NUM_MOVES],
     head: u8
+}
+
+impl fmt::Display for MoveList {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.head == 0 {
+            write!(f, "{{}}")?;
+            return Ok(())
+        }
+
+        write!(f, "{{ ")?;
+        for i in 0..(self.head - 1) as usize {
+            write!(f, "{}, ", self.moves[i])?;
+        }
+        write!(f, "{}", self.moves.last().unwrap())?;
+        write!(f, " }}")?;
+        return Ok(());
+    }
 }
 
 impl MoveList {
@@ -254,4 +346,9 @@ impl MoveList {
     pub fn at(&self, idx: usize) -> &Move {
         &self.moves[idx as usize]
     }
+
+    pub fn moves(&self) -> &[Move; MAX_NUM_MOVES] {
+        return &self.moves;
+    }
 }
+

@@ -6,10 +6,12 @@ use crate::moves::{*, MoveList};
 use std::fmt;
 
 mod tables;
+pub mod perft;
 
 #[cfg(test)]
 mod tests;
 
+#[derive(Default)]
 pub struct BoardTables {
     pub threats: u64,
     pub checks: u64,
@@ -39,8 +41,8 @@ impl fmt::Debug for BoardTables {
         writeln!(f, "PINS")?;
         for i in 0..9 as usize { write!(f, "---------------  ")?; }
         writeln!(f, "")?;
-        for j in 0..9 as usize {
-            for i in 0..8 as usize {
+        for j in 0..8 as usize {
+            for i in 0..9 as usize {
                 write!(f, "{} ", pins[i][j])?;
             }
             writeln!(f, "")?;
@@ -48,11 +50,12 @@ impl fmt::Debug for BoardTables {
         write!(f, "\n")?;
 
         // Print Other Stuff
-        writeln!(f, "PINS")?;
+        for i in 0..3 as usize { write!(f, "{: <17}", headers[i])?; };
+        writeln!(f, "")?;
         for i in 0..3 as usize { write!(f, "---------------  ")?; }
         writeln!(f, "")?;
-        for j in 0..3 as usize {
-            for i in 0..8 as usize {
+        for j in 0..8 as usize {
+            for i in 0..3 as usize {
                 write!(f, "{} ", boards[i][j])?;
             }
             writeln!(f, "")?;
@@ -73,10 +76,10 @@ impl MoveGenerator {
 
     pub fn gen_moves(&self, move_list: &mut MoveList, board: &Board, state: &BoardTables) {
         move_list.clear();
+        self.append_pawn_moves(move_list, board, state);
         self.append_simple_moves(move_list, board, state);
         self.append_castle_moves(move_list, board, state);
         self.append_enp_moves(move_list, board, state);
-        self.append_double_pawn_push(move_list, board, state);
         self.append_promos(move_list, board, state);
     }
 
@@ -95,6 +98,124 @@ impl MoveGenerator {
         return moves;
     }
 
+    fn append_pawn_moves(
+        &self,
+        move_list: &mut MoveList,
+        board: &Board,
+        state: &BoardTables
+    ) {
+        // Get the mask of pawns that we want to move.
+        let pieces = board.bitboard.piece[board.turn as usize][PAWN];
+
+        // Generate masks for attacking pawns moving left and right.
+        let left_smear = bitboard::pawn_smear_left(pieces, board.turn);
+        let mut left_attacks = left_smear & board.bitboard.color[board.enemy_color() as usize];
+        let right_smear = bitboard::pawn_smear_left(pieces, board.turn);
+        let mut right_attacks = right_smear & board.bitboard.color[board.enemy_color() as usize];
+
+        // Generate masks for moving pawns.
+        let forward_smear = bitboard::pawn_smear_forward(pieces, board.turn);
+        let mut forward_moves = forward_smear & !board.bitboard.occupancy;
+
+        // Smear the forward moves one more time to get the double moves.
+        let double_smear = bitboard::pawn_smear_forward(forward_moves, board.turn);
+        let mut double_moves = double_smear & !board.bitboard.occupancy;
+        double_moves &= if board.turn as usize == WHITE {
+            bitboard::WHITE_PAWN_LINE
+        } else {
+            bitboard::BLACK_PAWN_LINE
+        };
+
+        // Select the moves that should be turned into promotions.
+        let left_promos = left_attacks & bitboard::TOP_ROW & bitboard::BOTTOM_ROW;
+        left_attacks ^= left_promos;
+        let right_promos = right_attacks & bitboard::TOP_ROW & bitboard::BOTTOM_ROW;
+        right_attacks ^= right_promos;
+        let forward_promos = left_attacks & bitboard::TOP_ROW & bitboard::BOTTOM_ROW;
+        forward_moves ^= forward_promos;
+
+        // Turn the pushes into actual appended moves.
+        self.append_pushes(board, move_list, forward_moves);
+        self.append_left_attacks(board, move_list, left_attacks);
+        self.append_right_attacks(board, move_list, right_attacks);
+        self.append_doubles(board, move_list, double_moves);
+        self.append_left_promos(board, move_list, left_promos);
+        self.append_right_promos(board, move_list, right_promos);
+        self.append_forward_promos(board, move_list, forward_promos);
+    }
+    
+    fn append_pushes(&self, board: &Board, move_list: &mut MoveList, mut pushes: u64) {
+        while pushes != 0 {
+            let target: u8 = bitboard::pop_rbit(&mut pushes);
+            let sq: u8 = (target as i8
+                + if board.turn == WHITE as u8 { 8 } else { -8 } as i8) as u8;
+            move_list.push(Move::new(sq as u16, target as u16, QUIET))
+        }
+    }
+
+    fn append_doubles(&self, board: &Board, move_list: &mut MoveList, mut doubles: u64) {
+        while doubles != 0 {
+            let target: u8 = bitboard::pop_rbit(&mut doubles);
+            let sq: u8 = (target as i8
+                + if board.turn == WHITE as u8 { 16 } else { -16 } as i8) as u8;
+            move_list.push(Move::new(sq as u16, target as u16, DOUBLE_PAWN_PUSH))
+        }
+    }
+
+    fn append_left_attacks(&self, board: &Board, move_list: &mut MoveList, mut attacks: u64) {
+        while attacks != 0 {
+            let target: u8 = bitboard::pop_rbit(&mut attacks);
+            let sq: u8 = (target as i8
+                + if board.turn == WHITE as u8 { 9 } else { -7 } as i8) as u8;
+            move_list.push(Move::new(sq as u16, target as u16, CAPTURE))
+        }
+    }
+
+    fn append_right_attacks(&self, board: &Board, move_list: &mut MoveList, mut attacks: u64) {
+        while attacks != 0 {
+            let target: u8 = bitboard::pop_rbit(&mut attacks);
+            let sq: u8 = (target as i8
+                + if board.turn == WHITE as u8 { 7 } else { -9 } as i8) as u8;
+            move_list.push(Move::new(sq as u16, target as u16, CAPTURE))
+        }
+    }
+
+    fn append_left_promos(&self, board: &Board, move_list: &mut MoveList, mut promos: u64) {
+        while promos != 0 {
+            let target: u8 = bitboard::pop_rbit(&mut promos);
+            let sq: u8 = (target as i8
+                + if board.turn == WHITE as u8 { 9 } else { -7 } as i8) as u8;
+            move_list.push(Move::new(sq as u16, target as u16, KNIGHT_PROMO_CAPTURE));
+            move_list.push(Move::new(sq as u16, target as u16, BISHOP_PROMO_CAPTURE));
+            move_list.push(Move::new(sq as u16, target as u16, ROOK_PROMO_CAPTURE));
+            move_list.push(Move::new(sq as u16, target as u16, QUEEN_PROMO_CAPTURE));
+        }
+    }
+
+    fn append_right_promos(&self, board: &Board, move_list: &mut MoveList, mut promos: u64) {
+        while promos != 0 {
+            let target: u8 = bitboard::pop_rbit(&mut promos);
+            let sq: u8 = (target as i8
+                + if board.turn == WHITE as u8 { 7 } else { -9 } as i8) as u8;
+            move_list.push(Move::new(sq as u16, target as u16, KNIGHT_PROMO_CAPTURE));
+            move_list.push(Move::new(sq as u16, target as u16, BISHOP_PROMO_CAPTURE));
+            move_list.push(Move::new(sq as u16, target as u16, ROOK_PROMO_CAPTURE));
+            move_list.push(Move::new(sq as u16, target as u16, QUEEN_PROMO_CAPTURE));
+        }
+    }
+
+    fn append_forward_promos(&self, board: &Board, move_list: &mut MoveList, mut promos: u64) {
+        while promos != 0 {
+            let target: u8 = bitboard::pop_rbit(&mut promos);
+            let sq: u8 = (target as i8
+                + if board.turn == WHITE as u8 { 8 } else { -8 } as i8) as u8;
+            move_list.push(Move::new(sq as u16, target as u16, KNIGHT_PROMO));
+            move_list.push(Move::new(sq as u16, target as u16, BISHOP_PROMO));
+            move_list.push(Move::new(sq as u16, target as u16, ROOK_PROMO));
+            move_list.push(Move::new(sq as u16, target as u16, QUEEN_PROMO));
+        }
+    }
+
     fn append_simple_moves(
         &self,
         move_list: &mut MoveList,
@@ -103,13 +224,8 @@ impl MoveGenerator {
     ) {
         let mut pieces = board.bitboard.color[board.turn as usize];
 
-        // Take out the pawns that are on the opposing sides home row as their next move will be
-        // a promotion and should be handled separately.
-        pieces ^= board.bitboard.piece[board.turn as usize][PAWN] & if board.turn == WHITE as u8 {
-            bitboard::BLACK_PAWN_HOME
-        } else {
-            bitboard::WHITE_PAWN_HOME
-        };
+        // Take out the pawns as they are handled sepearately.
+        pieces ^= board.bitboard.piece[board.turn as usize][PAWN];
 
         // Append all of the moves to the list.
         while pieces != 0 {
@@ -171,7 +287,7 @@ impl MoveGenerator {
         }
 
         // Get the column of that enpassanet.
-        let enemy_turn: usize = (!(board.turn as usize == WHITE)) as usize;
+        let enemy_turn: usize = board.enemy_color() as usize;
         let enp_row_start: u8 = if board.turn as usize == WHITE {
             mailbox::WHITE_MIN_ENPASSANT_TARGET
         } else {
@@ -181,7 +297,7 @@ impl MoveGenerator {
         let enemy_sq: i8 = enp_sq as i8 + if board.turn as usize == WHITE { 8 } else { -8 };
 
         // Get all of the pieces that can enpassant.
-        let mut enp_sources = self.get_pawn_threat_mask(enemy_turn as u8, enp_sq)
+        let mut enp_sources = self.get_pawn_threat_mask(enp_sq, board.enemy_color())
             & board.bitboard.piece[board.turn as usize][PAWN];
 
         while enp_sources != 0 {
@@ -197,7 +313,7 @@ impl MoveGenerator {
             let king_sq: u8 = bitboard::peek_rbit(&board.bitboard.piece[enemy_turn][KING]);
 
             // Check if any pawns are threatening the king after the move.
-            let pawn_threats: u64 = self.get_pawn_threat_mask(board.turn, king_sq)
+            let pawn_threats: u64 = self.get_pawn_threat_mask(king_sq, board.turn)
                 & board.bitboard.piece[enemy_turn][PAWN];
             if pawn_threats != 0 { continue; }
 
@@ -223,6 +339,7 @@ impl MoveGenerator {
         }
     }
 
+    // TODO - Remove this function. Handle with pawn smear for efficiency.
     fn append_double_pawn_push(
         &self,
         move_list: &mut MoveList,
@@ -253,6 +370,7 @@ impl MoveGenerator {
         }
     }
 
+    // TODO - Update promo appension to work with my new pawn smear stuff.
     fn append_promos(
         &self,
         move_list: &mut MoveList,
@@ -281,7 +399,7 @@ impl MoveGenerator {
                 move_list.push(Move::new(sq as u16, push_target as u16, QUEEN_PROMO));
             }
 
-            let mut cap_targets: u64 = self.get_pawn_threat_mask(board.turn, sq);
+            let mut cap_targets: u64 = self.get_pawn_threat_mask(sq, board.turn);
             cap_targets &= board.bitboard.color[enemy_turn];
             cap_targets &= legal_mask;
             while cap_targets != 0 {
@@ -354,15 +472,16 @@ impl MoveGenerator {
         let not_turn: u8 = (board.turn != 0) as u8;
 
         // Smear the pawns to get all of their attacks.
-        let pawns: u64 = board.bitboard.piece[board.turn as usize][board::PAWN as usize];
-        let king: u64 = board.bitboard.piece[board.turn as usize][board::KING as usize];
+        let pawns: u64 = board.bitboard.piece[board.enemy_color() as usize][board::PAWN as usize];
+        let king: u64 = board.bitboard.piece[board.enemy_color() as usize][board::KING as usize];
 
-        threats = bitboard::pawn_smear(pawns, board.turn == board::WHITE as u8);
+        // Generate our threats by smearing the bitboard.
+        threats = bitboard::pawn_smear(pawns, board.enemy_color());
 
         // For each of the remaining pieces, gen the legal moves after removing the desired king
         // from the occupancy mask. This is because the king cannot block a threat, pieces should
         // "see through" the king).
-        let mut pieces: u64 = board.bitboard.color[board.turn as usize] ^ pawns;
+        let mut pieces: u64 = board.bitboard.color[board.enemy_color() as usize] ^ pawns;
         let occupancy: u64 = board.bitboard.occupancy ^ king;
         while pieces != 0 {
             let sq: u8 = bitboard::pop_rbit(&mut pieces);
@@ -378,8 +497,7 @@ impl MoveGenerator {
     }
 
     fn gen_checks(&self, board: &Board, threats: u64) -> u64 {
-        let not_turn: u8 = (board.turn != 0) as u8;
-        let pieces: &[u64; 6] = &board.bitboard.piece[not_turn as usize];
+        let pieces: &[u64; 6] = &board.bitboard.piece[board.enemy_color() as usize];
         let occupancy: u64 = board.bitboard.occupancy;
 
         // Exit early if the king isn't on the threat squares.
@@ -389,7 +507,8 @@ impl MoveGenerator {
 
         // Build the list of pieces that are checking the king.
         let king_sq: u8 = bitboard::peek_rbit(&pieces[board::KING]);
-        let mut checks = self.get_pawn_threat_mask(king_sq, not_turn) & pieces[board::PAWN];
+        let mut checks = self.get_pawn_threat_mask(king_sq, board.enemy_color())
+            & pieces[board::PAWN];
         checks |= self.get_knight_move_mask(king_sq) & pieces[board::KNIGHT];
         checks |= self.get_bishop_move_mask(king_sq, occupancy)
             & (pieces[board::BISHOP] | pieces[board::QUEEN]);
@@ -426,7 +545,6 @@ impl MoveGenerator {
         let mut pinner: u64 = self.xray_rook_attacks(occupancy, blockers, king_sq)
             & (board.bitboard.piece[board.enemy_color() as usize][ROOK]
                 | board.bitboard.piece[board.enemy_color() as usize][QUEEN]);
-        println!("");
         while pinner != 0 {
             let sq: u8 = bitboard::pop_rbit(&mut pinner);
             pins[i] = self.tables.read_to_from_table(king_sq, sq);
@@ -437,7 +555,6 @@ impl MoveGenerator {
         let mut pinner: u64 = self.xray_bishop_attacks(occupancy, blockers, king_sq)
             & (board.bitboard.piece[board.enemy_color() as usize][BISHOP]
                 | board.bitboard.piece[board.enemy_color() as usize][QUEEN]);
-        println!("");
         i = 0;
         while pinner != 0 {
             let sq: u8 = bitboard::pop_rbit(&mut pinner);

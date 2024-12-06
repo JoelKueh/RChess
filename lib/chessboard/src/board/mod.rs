@@ -36,6 +36,7 @@ pub const PID_BLACK_ROOK: u8    = 0b1100;
 pub const PID_BLACK_QUEEN: u8   = 0b1101;
 pub const PID_BLACK_KING: u8    = 0b1110;
 
+#[derive(Default)]
 pub struct HistoryElement {
     pub last_move: Move,
     pub new_state: hist_state::HistState
@@ -140,6 +141,7 @@ impl Board {
         let hlfmv: &str = fen_split.next().ok_or(malformed_error.clone())?;
         let fullmv: &str = fen_split.next().ok_or(malformed_error.clone())?;
 
+        // Verify the length requirements of the fen string pieces.
         if turn.len() != 1 { return Err(FenError::FenMalformedError("malformed fen turn".into())); }
         if rights.len() < 1 || rights.len() > 4 {
             return Err(FenError::FenMalformedError("malformed fen rights".into()));
@@ -149,9 +151,9 @@ impl Board {
         }
 
         // Parse the main part of the fen string.
-        let new_board: Self = Self::from_fen_main(main)?;
-        new_board.set_turn_from_fen(turn);
-        new_board.set_rights_from_fen(rights);
+        let mut new_board: Self = Self::from_fen_main(main)?;
+        new_board.set_turn_from_fen(turn)?;
+        new_board.set_rights_from_fen(rights)?;
         
         return Ok(new_board);
     }
@@ -167,13 +169,22 @@ impl Board {
     }
     
     fn set_rights_from_fen(&mut self, rights: &str) -> Result<(), FenError> {
-        return 
+        match rights.chars().nth(0) {
+            Some('K') => self.history.data.last_mut().unwrap().new_state.add_ksc_right(WHITE as u8),
+            Some('Q') => self.history.data.last_mut().unwrap().new_state.add_qsc_right(WHITE as u8),
+            Some('k') => self.history.data.last_mut().unwrap().new_state.add_ksc_right(BLACK as u8),
+            Some('q') => self.history.data.last_mut().unwrap().new_state.add_qsc_right(BLACK as u8),
+            None => return Err(FenError::FenMalformedError("empty string in fen rights".into())),
+            _ => return Err(FenError::FenMalformedError("invalid character in fen rights".into())),
+        }
+        return Ok(());
     }
 
     fn from_fen_main(fen_main: &str) -> Result<Self, FenError> {
         let mut new_board: Self = Self::new_empty();
         let mut sq: u8 = 0;
 
+        // Initialize the board by looping through the characters in the string.
         let mut current_row: u8 = 0;
         for c in fen_main.chars() {
             match c {
@@ -228,6 +239,7 @@ impl Board {
             }
         }
 
+        // Throw errors for the write head not being at the end of the board.
         if sq < 64 {
             return Err(FenError::FenMalformedError(
                     "incomplete main fen string".to_string()
@@ -237,7 +249,10 @@ impl Board {
                     "mian fen contained too many elements".to_string()
             ));
         }
-        
+
+        // Initialize the board state.
+        new_board.history.data.push(Default::default());
+
         return Ok(new_board);
     }
 
@@ -369,6 +384,7 @@ impl Board {
                 new_state.set_captured_piece(EMPTY as u8);
                 new_state.decay_castle_rights(self.turn, to, from);
                 self.write_piece(to, ptype, pcolor);
+                self.delete_piece(from, ptype, pcolor);
             },
             CAPTURE => {
                 let ptype: u8 = self.type_at_sq(from);
@@ -406,7 +422,7 @@ impl Board {
                     mailbox::BLACK_KING_SIDE_ROOK_START
                 };
 
-                let rook_to: u8 = if self.turn as usize== WHITE {
+                let rook_to: u8 = if self.turn as usize == WHITE {
                     mailbox::WHITE_KING_SIDE_ROOK_TARGET
                 } else {
                     mailbox::BLACK_KING_SIDE_ROOK_TARGET
@@ -537,7 +553,8 @@ impl Board {
             QUIET | DOUBLE_PAWN_PUSH => {
                 let ptype: u8 = self.type_at_sq(to);
                 let pcolor: u8 = self.turn;
-                self.write_piece(from, ptype, pcolor); self.delete_piece(to, ptype, pcolor);
+                self.write_piece(from, ptype, pcolor);
+                self.delete_piece(to, ptype, pcolor);
             },
             CAPTURE => {
                 let ptype: u8 = self.type_at_sq(from);

@@ -14,6 +14,8 @@ pub const FULL: u64             = 0xFFFFFFFFFFFFFFFF;
 pub const EMPTY: u64            = 0x0000000000000000;
 pub const BLACK_PAWN_HOME: u64  = 0x000000000000FF00; // Second-to-top row
 pub const WHITE_PAWN_HOME: u64  = 0x00FF000000000000; // Second-to-bottom row
+pub const BLACK_PAWN_LINE: u64  = 0x00000000FF000000; // Fourth row from top
+pub const WHITE_PAWN_LINE: u64  = 0x000000FF00000000; // Fourth row from bottom
 
 pub const WHITE_KING_SIDE_CASTLE_TARGET: u64   = 1u64 << mailbox::WHITE_KING_SIDE_CASTLE_TARGET;
 pub const WHITE_QUEEN_SIDE_CASTLE_TARGET: u64  = 1u64 << mailbox::WHITE_QUEEN_SIDE_CASTLE_TARGET;
@@ -126,8 +128,32 @@ pub fn u64_to_bb(bb: u64) -> [String; 8] {
 
 /// Generates all attacked squares for pawns by shifting the bitboard in a particular direction.
 /// Shifts the bitboard either up or down the board depending on the direction specified in is_up.
-pub fn pawn_smear(pawns: u64, is_up: bool) -> u64 {
-    if is_up {
+pub fn pawn_smear(pawns: u64, color: u8) -> u64 {
+    if color == WHITE as u8 {
+        (pawns >> 9 & !RIGHT_COL) | (pawns >> 7 & !LEFT_COL)
+    } else {
+        (pawns << 7 & !RIGHT_COL) | (pawns << 9 & !LEFT_COL)
+    }
+}
+
+pub fn pawn_smear_left(pawns: u64, color: u8) -> u64 {
+    if color == WHITE as u8 {
+        pawns >> 9 & !RIGHT_COL
+    } else {
+        pawns << 7 & !RIGHT_COL
+    }
+}
+
+pub fn pawn_smear_forward(pawns: u64, color: u8) -> u64 {
+    if color == WHITE as u8 {
+        pawns >> 8
+    } else {
+        pawns << 8
+    }
+}
+
+pub fn pawn_smear_right(pawns: u64, color: u8) -> u64 {
+    if color == WHITE as u8 {
         (pawns >> 9 & !RIGHT_COL) | (pawns >> 7 & !LEFT_COL)
     } else {
         (pawns << 7 & !RIGHT_COL) | (pawns << 9 & !LEFT_COL)
