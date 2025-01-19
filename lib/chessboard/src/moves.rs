@@ -3,6 +3,7 @@
 
 use crate::board;
 use std::fmt;
+use std::error::Error;
 
 pub const QUIET: u16                 =  0 << 12;
 pub const DOUBLE_PAWN_PUSH: u16      =  1 << 12;
@@ -26,10 +27,11 @@ const FLAG_MASK: u16    = 0xF << 12;
 pub const MAX_NUM_MOVES: usize = 218;
 pub const INVALID_MOVE: u16 = 0b0110111111111111;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct MoveSlice(Vec<Move>);
-#[derive(Debug)]
-pub enum MoveDecodeErr {
+
+#[derive(Clone, Debug)]
+pub enum MoveError {
     MoveMalformedErr(String),
     MoveNoMatchesError(String),
     MoveNotUniqueErr(MoveSlice)
@@ -52,21 +54,23 @@ impl fmt::Display for MoveSlice {
     }
 }
 
-impl fmt::Display for MoveDecodeErr {
+impl fmt::Display for MoveError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            MoveDecodeErr::MoveMalformedErr(msg) => {
-                write!(f, "invalid move string provided ({})", msg)
+            MoveError::MoveMalformedErr(msg) => {
+                write!(f, "invalid move string provided: {}", msg)
             },
-            MoveDecodeErr::MoveNoMatchesError(msg) => {
-                write!(f, "move ({}) not found in list of legal moves", msg)
+            MoveError::MoveNoMatchesError(msg) => {
+                write!(f, "move is not legal: {} ", msg)
             },
-            MoveDecodeErr::MoveNotUniqueErr(mvvec) => {
-                write!(f, "move is not unique in list of legal moves ({})", mvvec)
+            MoveError::MoveNotUniqueErr(mvvec) => {
+                write!(f, "move is not unique: {}", mvvec)
             }
         }
     }
 }
+
+impl Error for MoveError {}
 
 #[derive(Clone, Copy, Debug)]
 pub struct Move {
@@ -238,7 +242,7 @@ impl Move {
     }
 
     /// Builds the move from a UCI algebraic notation string representation of the move.
-    pub fn from_uci_algbr(algbr: &str, moves: &MoveList) -> Result<Move, MoveDecodeErr> {
+    pub fn from_uci_algbr(algbr: &str, moves: &MoveList) -> Result<Move, MoveError> {
         let mut from: u8 = algbr.chars().nth(0).unwrap() as u8 - 'a' as u8;
         from += ('8' as u8 - algbr.chars().nth(1).unwrap() as u8) * 8;
         let mut to: u8 = algbr.chars().nth(2).unwrap() as u8 - 'a' as u8;
@@ -251,12 +255,12 @@ impl Move {
 
         // Check if we got at least one item from the match.
         let Some(mv) = matching.nth(0) else {
-            return Err(MoveDecodeErr::MoveNoMatchesError(algbr.to_string()));
+            return Err(MoveError::MoveNoMatchesError(algbr.to_string()));
         };
 
         // Check if there were too many items.
         if let Some(extra_mv) = matching.nth(1) {
-            return Err(MoveDecodeErr::MoveNotUniqueErr(MoveSlice(matching.cloned().collect())));
+            return Err(MoveError::MoveNotUniqueErr(MoveSlice(matching.cloned().collect())));
         };
 
         return Ok(mv.clone());

@@ -230,7 +230,9 @@ impl MoveGenerator {
         // Append all of the moves to the list.
         while pieces != 0 {
             let sq = bitboard::pop_rbit(&mut pieces);
+            println!("{}", sq);
             let mut simple = self.gen_legal_mv_mask(sq, board, state);
+            println!("{}", simple);
             while simple != 0 {
                 let target: u8 = bitboard::pop_rbit(&mut simple);
                 let flag: u16 = if (1u64 << target) & board.bitboard.occupancy == 0 {
@@ -499,14 +501,15 @@ impl MoveGenerator {
     fn gen_checks(&self, board: &Board, threats: u64) -> u64 {
         let pieces: &[u64; 6] = &board.bitboard.piece[board.enemy_color() as usize];
         let occupancy: u64 = board.bitboard.occupancy;
+        let king: u64 = board.bitboard.piece[board.turn as usize][board::KING];
 
         // Exit early if the king isn't on the threat squares.
-        if pieces[board::KING] & threats == 0 {
+        if king & threats == 0 {
             return 0;
         }
 
         // Build the list of pieces that are checking the king.
-        let king_sq: u8 = bitboard::peek_rbit(&pieces[board::KING]);
+        let king_sq: u8 = bitboard::peek_rbit(&king);
         let mut checks = self.get_pawn_threat_mask(king_sq, board.enemy_color())
             & pieces[board::PAWN];
         checks |= self.get_knight_move_mask(king_sq) & pieces[board::KNIGHT];

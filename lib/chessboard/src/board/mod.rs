@@ -1,8 +1,8 @@
 
 #![allow(unused_variables, dead_code)]
 
+use std::error::Error;
 use crate::moves::*;
-use std::num::Wrapping;
 use std::fmt;
 
 pub mod bitboard;
@@ -55,65 +55,23 @@ pub struct BoardHistory {
 }
 
 #[derive(Clone, Debug)]
-pub enum FenError {
-    FenMalformedError(String)
+pub enum ParseError {
+    Malformed(&'static str),
+    InvalidMove(&'static str),
+    IllegalMove(Move)
 }
 
-#[derive(Clone, Debug)]
-pub enum UciError<'a> {
-    UciMalformedError(&'a str),
-    UciInvalidMoveError(&'a str),
-    UciIllegalMoveError(Move),
-}
-
-#[derive(Clone, Debug)]
-pub enum PgnError<'a> {
-    PgnMalformedError(&'a str),
-    PgnInvalidMoveError(&'a str),
-    PgnIllegalMoveError(Move),
-}
-
-impl fmt::Display for FenError {
+impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FenError::FenMalformedError(msg) => {
-                write!(f, "invalid fen string provided ({})", msg)
-            }
+            Self::Malformed(context) => write!(f, "malformed string: {}", context),
+            Self::InvalidMove(mv_str) => write!(f, "invalid move: {}", mv_str),
+            Self::IllegalMove(mv) => write!(f, "illegal move: {}", mv.to_long_algbr())
         }
     }
 }
 
-impl fmt::Display for UciError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            UciError::UciMalformedError(msg) => {
-                write!(f, "invalid uci string provided ({})", msg)
-            },
-            UciError::UciInvalidMoveError(mv) => {
-                write!(f, "invalid move: {} when parsing uci string", mv)
-            },
-            UciError::UciIllegalMoveError(mv) => {
-                write!(f, "illegal move: {} when parsing uci string", mv.to_long_algbr())
-            }
-        }
-    }
-}
-
-impl fmt::Display for PgnError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PgnError::PgnMalformedError(msg) => {
-                write!(f, "invalid pgn string provided ({})", msg)
-            },
-            PgnError::PgnInvalidMoveError(msg) => {
-                write!(f, "invalid move: {} when parsing pgn string", msg)
-            }
-            PgnError::PgnIllegalMoveError(mv) => {
-                write!(f, "illegal move: {} when parsing pgn string", mv.to_long_algbr())
-            }
-        }
-    }
-}
+impl Error for ParseError {}
 
 impl Board {
     fn new_empty() -> Self {
@@ -128,26 +86,25 @@ impl Board {
         }
     }
 
-    pub fn from_fen(fen: &str) -> Result<Self, FenError> {
+    pub fn from_fen(fen: &str) -> Result<Self, ParseError> {
         let mut fen_split = fen.split(' ');
 
         // Verify that our string has all of the necessary components.
-        const MSG_TOO_SHORT: &str = "fen too short";
-        let malformed_error = FenError::FenMalformedError(MSG_TOO_SHORT.into());
-        let main: &str = fen_split.next().ok_or(malformed_error.clone())?;
-        let turn: &str = fen_split.next().ok_or(malformed_error.clone())?;
-        let rights: &str = fen_split.next().ok_or(malformed_error.clone())?;
-        let enp_col: &str = fen_split.next().ok_or(malformed_error.clone())?;
-        let hlfmv: &str = fen_split.next().ok_or(malformed_error.clone())?;
-        let fullmv: &str = fen_split.next().ok_or(malformed_error.clone())?;
+        const TOO_SHORT: ParseError = ParseError::Malformed("fen too short");
+        let main: &str = fen_split.next().ok_or(TOO_SHORT)?;
+        let turn: &str = fen_split.next().ok_or(TOO_SHORT)?;
+        let rights: &str = fen_split.next().ok_or(TOO_SHORT)?;
+        let enp_col: &str = fen_split.next().ok_or(TOO_SHORT)?;
+        let hlfmv: &str = fen_split.next().ok_or(TOO_SHORT)?;
+        let fullmv: &str = fen_split.next().ok_or(TOO_SHORT)?;
 
         // Verify the length requirements of the fen string pieces.
-        if turn.len() != 1 { return Err(FenError::FenMalformedError("malformed fen turn".into())); }
+        if turn.len() != 1 { return Err(ParseError::Malformed("pieces too short")); }
         if rights.len() < 1 || rights.len() > 4 {
-            return Err(FenError::FenMalformedError("malformed fen rights".into()));
+            return Err(ParseError::Malformed("rights too short"));
         }
         if enp_col.len() != 1 {
-            return Err(FenError::FenMalformedError("malformed fen enp_col".into()));
+            return Err(ParseError::Malformed("enp too short"));
         }
 
         // Parse the main part of the fen string.
@@ -158,29 +115,30 @@ impl Board {
         return Ok(new_board);
     }
 
-    fn set_turn_from_fen(&mut self, turn: &str) -> Result<(), FenError> {
+    fn set_turn_from_fen(&mut self, turn: &str) -> Result<(), ParseError> {
         match turn.chars().nth(0) {
             Some('w') => self.turn = WHITE as u8,
             Some('b') => self.turn = BLACK as u8,
-            None => return Err(FenError::FenMalformedError("empty string in fen turn".into())),
-            _ => return Err(FenError::FenMalformedError("invalid character in fen turn".into())),
+            None => return Err(ParseError::Malformed("empty fen turn")),
+            _ => return Err(ParseError::Malformed("invalid character in fen turn")),
         }
         return Ok(());
     }
     
-    fn set_rights_from_fen(&mut self, rights: &str) -> Result<(), FenError> {
+    fn set_rights_from_fen(&mut self, rights: &str) -> Result<(), ParseError> {
         match rights.chars().nth(0) {
             Some('K') => self.history.data.last_mut().unwrap().new_state.add_ksc_right(WHITE as u8),
             Some('Q') => self.history.data.last_mut().unwrap().new_state.add_qsc_right(WHITE as u8),
             Some('k') => self.history.data.last_mut().unwrap().new_state.add_ksc_right(BLACK as u8),
             Some('q') => self.history.data.last_mut().unwrap().new_state.add_qsc_right(BLACK as u8),
-            None => return Err(FenError::FenMalformedError("empty string in fen rights".into())),
-            _ => return Err(FenError::FenMalformedError("invalid character in fen rights".into())),
+            Some('-') => return Ok(()),
+            None => return Err(ParseError::Malformed("empty fen rights")),
+            _ => return Err(ParseError::Malformed("invalid character in fen rights")),
         }
         return Ok(());
     }
 
-    fn from_fen_main(fen_main: &str) -> Result<Self, FenError> {
+    fn from_fen_main(fen_main: &str) -> Result<Self, ParseError> {
         let mut new_board: Self = Self::new_empty();
         let mut sq: u8 = 0;
 
@@ -191,9 +149,7 @@ impl Board {
                 '1'..='8' => {
                     sq += c.to_digit(10).unwrap() as u8;
                     if sq < current_row * 8 || sq > current_row * 8 + 8 {
-                        return Err(FenError::FenMalformedError(
-                                "expected '/' before wrap around".to_string()
-                        ));
+                        return Err(ParseError::Malformed("expected '/' before wrap around"));
                     }
                 },
                 'p' | 'P' => {
@@ -228,26 +184,21 @@ impl Board {
                 },
                 '/' => {
                     if sq % 8 != 0 {
-                        return Err(FenError::FenMalformedError("unexpected '/'".to_string()))
+                        return Err(ParseError::Malformed("unexpected '/'"))
                     }
                     current_row += 1;
                 },
                 a => {
-                    let msg: String = format!("unexpected character {}", a);
-                    return Err(FenError::FenMalformedError(msg))
+                    return Err(ParseError::Malformed("unexpected character"))
                 }
             }
         }
 
         // Throw errors for the write head not being at the end of the board.
         if sq < 64 {
-            return Err(FenError::FenMalformedError(
-                    "incomplete main fen string".to_string()
-            ));
+            return Err(ParseError::Malformed("incomplete main fen string"));
         } else if sq > 64 {
-            return Err(FenError::FenMalformedError(
-                    "mian fen contained too many elements".to_string()
-            ));
+            return Err(ParseError::Malformed("main fen contained too many elements"));
         }
 
         // Initialize the board state.
@@ -256,11 +207,11 @@ impl Board {
         return Ok(new_board);
     }
 
-    pub fn from_pgn(pgn: &str) -> Result<Self, PgnError> {
+    pub fn from_pgn(pgn: &str) -> Result<Self, ParseError> {
         todo!()
     }
 
-    pub fn from_uci(uci: &str) -> Result<Self, UciError> {
+    pub fn from_uci(uci: &str) -> Result<Self, ParseError> {
         todo!()
     }
 
@@ -273,7 +224,7 @@ impl Board {
                 let pcolor = self.color_at(row as u8, col as u8);
                 let c = match ptype as usize {
                     PAWN => 'p',
-                    KNIGHT => 'k',
+                    KNIGHT => 'n',
                     BISHOP => 'b',
                     ROOK => 'r',
                     QUEEN => 'q',
@@ -473,6 +424,9 @@ impl Board {
                 self.delete_piece(from, PAWN as u8, self.turn);
                 self.write_piece(to, PAWN as u8, self.turn);
                 self.delete_piece((to as i8 + 8 * direction) as u8, PAWN as u8, self.enemy_color());
+
+                // TODO: Remove
+                println!("Enpassant");
             },
             KNIGHT_PROMO => {
                 new_state.set_captured_piece(EMPTY as u8);
@@ -557,7 +511,7 @@ impl Board {
                 self.delete_piece(to, ptype, pcolor);
             },
             CAPTURE => {
-                let ptype: u8 = self.type_at_sq(from);
+                let ptype: u8 = self.type_at_sq(to);
                 let pcolor: u8 = self.turn;
                 let cap_ptype: u8 = state.get_captured_piece();
                 let cap_pcolor: u8 = self.enemy_color();
@@ -681,3 +635,26 @@ impl Board {
     }
 }
 
+impl fmt::Display for Board {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        const SEPARATOR_LINE: &str  = "   +---+---+---+---+---+---+---+---+";
+        const PIECE_LINE: [&str; 3] = [ "| ", " | ", " |"];
+        const FILE_LINE: &str = "     A   B   C   D   E   F   G   H";
+
+        writeln!(f, "{}", FILE_LINE)?;
+        writeln!(f, "{}", SEPARATOR_LINE)?;
+        let board_str = self.str_rep();
+        for row in 0..8 as usize {
+            write!(f, " {} ", 8 - row)?;
+            write!(f, "{}", PIECE_LINE[0])?;
+            for col in 0..7 as usize {
+                write!(f, "{}{}", board_str[row][col], PIECE_LINE[1])?;
+            }
+            write!(f, "{}{}", board_str[row][7], PIECE_LINE[2])?;
+            writeln!(f, " {}", 8 - row)?;
+            writeln!(f, "{}", SEPARATOR_LINE)?;
+        }
+        writeln!(f, "{}", FILE_LINE)?;
+        Ok(())
+    }
+}

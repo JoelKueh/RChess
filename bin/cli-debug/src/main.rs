@@ -6,65 +6,42 @@ use chessboard::generator::*;
 use chessboard::moves::*;
 use std::io::stdin;
 use std::fmt;
+use std::error::Error;
 
 mod board_printer;
 
-#[derive(Debug)]
-struct CmdParseErr(String);
-impl fmt::Display for CmdParseErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid command: {}", self.0)
-    }
+#[derive(Clone, Debug)]
+enum CommandError {
+    Invalid,
+    Malformed(&'static str),
+    ParseError(ParseError),
+    MoveError(MoveError)
 }
 
-#[derive(Debug)]
-enum CmdFenErr {
-    FenParseErr(FenError),
-    CmdParseErr(String)
-}
-impl fmt::Display for CmdFenErr {
+impl fmt::Display for CommandError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FenError::FenParseErr(msg) => {
-                write!(f, "invalid fen string provided ({})", msg)
-            }
+            Self::Invalid => write!(f, "invalid command"),
+            Self::Malformed(context) => write!(f, "malformed command: {}", context),
+            Self::ParseError(err) => write!(f, "{}", err),
+            Self::MoveError(err) => write!(f, "{}", err),
         }
     }
 }
 
-#[derive(Debug)]
-enum CmdMoveErr {
-    MoveParseErr(MoveDecodeErr),
-    CmdParseErr(String)
-}
-impl fmt::Display for CmdMoveErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid command: {}", self.0)
+impl From<ParseError> for CommandError {
+    fn from(value: ParseError) -> Self {
+        return Self::ParseError(value)
     }
 }
 
-#[derive(Debug)]
-enum CmdDebugErr {
-    CmdParseErr(String)
-}
-impl fmt::Display for CmdDebugErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "invalid command: {}", self.0)
+impl From<MoveError> for CommandError {
+    fn from(value: MoveError) -> Self {
+        return Self::MoveError(value)
     }
 }
 
-#[derive(Debug)]
-enum InputErr {
-    Fen(CmdFenErr),
-    Move(CmdMoveErr),
-    Debug(CmdDebugErr),
-    Invalid(CmdParseErr)
-}
-impl fmt::Display for InputErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        println!("");
-    }
-}
+impl Error for CommandError {}
 
 fn get_sq_colored(board_str: &[[char; 8]; 8], row: u8, col: u8) {
     
@@ -88,22 +65,12 @@ fn main() {
     let mut moves: MoveList = MoveList::new();
     let mut board: Board = Board::from_fen(DEFAULT_FEN).expect("Unexpected fen error");
 
-    //print_board_ascii(&board);
-
     let state: BoardTables = generator.gen_board_tables(&board);
-    //println!("{:?}", state);
-    //println!("{:?}", board.bitboard);
-    generator.gen_moves(&mut moves, &board, &state);
-    //print_mvlst(&moves);
-
-    //perft::perft(DEFAULT_FEN, 1).expect("Unexpected fen error");
-    board.make(&Move::from_uci_algbr("a2a3".into(), &moves).expect(""));
-    board.make(&Move::from_uci_algbr("a7a6".into(), &moves).expect(""));
-    println!("{:?}", board.bitboard);
 
     loop {
         let mut input: String = String::new();
         stdin().read_line(&mut input).expect("Input error");
+        input.pop().unwrap();
         match parse_input(&input, &mut board) {
             Err(err) => println!("{}", err),
             Ok(_) => ()
@@ -111,18 +78,18 @@ fn main() {
     }
 }
 
-fn handle_fen(cmd: Vec<&str>, board: &mut Board) -> Result<(), CmdFenErr> {
-    let Some(slice) = cmd.get(1..fen.len()) else {
-        return Err(CmdFenErr::CmdParseErr("Missing argument \"FEN\": usage fen <FEN>".into()));
+fn handle_fen(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
+    let Some(slice) = cmd.get(1..cmd.len()) else {
+        return Err(CommandError::Malformed("usage \"fen <FEN>\""));
     };
     let fen: String = slice.join(" ");
     *board = Board::from_fen(&fen)?;
     return Ok(())
 }
 
-fn handle_move(cmd: Vec<&str>, board: &mut Board) -> Result<(), CmdMoveErr> {
+fn handle_move(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
     let Some(mv_str) = cmd.get(1) else {
-        return Err(CmdMoveErr::CmdParseErr("Missing argument \"MOVE\": usage move <MOVE>".into()));
+        return Err(CommandError::Malformed("usage \"move <MOVE>\""));
     };
     let generator = MoveGenerator::new();
     let state = generator.gen_board_tables(board);
@@ -133,7 +100,7 @@ fn handle_move(cmd: Vec<&str>, board: &mut Board) -> Result<(), CmdMoveErr> {
     return Ok(());
 }
 
-fn handle_debug(cmd: Vec<&str>, board: &mut Board) -> Result<(), CmdDebugErr> {
+fn handle_debug(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
     match cmd.get(1) {
         Some(&"moves") => {
             let generator = MoveGenerator::new();
@@ -154,19 +121,46 @@ fn handle_debug(cmd: Vec<&str>, board: &mut Board) -> Result<(), CmdDebugErr> {
             Ok(())
         },
         None => {
-            Err(CmdDebugErr::CmdParseErr("Missing argument \"ITEM\": usage debug <ITEM>".into()))
+            Err(CommandError::Malformed("usage \"debug <ITEM>\""))
         },
-        _ => Err(CmdDebugErr::CmdParseErr("Invlid argument {} for debug command".into()))
+        _ => Err(CommandError::Malformed("invalid debug item: usage \"debug <ITEM>\""))
     }
 }
 
-fn parse_input(input: &str, board: &mut Board) -> Result<(), InputErr> {
+fn handle_go(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
+    match cmd.get(1) {
+        Some(&"perft") => {
+            const MALFORMED: CommandError
+                = CommandError::Malformed("usage \"go perft <DEPTH>\"");
+
+            // Rust code can be so stupid at times.
+            let depth: u32 = cmd.get(2).ok_or(MALFORMED)?
+                .parse::<u32>().ok().ok_or(MALFORMED)?;
+            perft::perft(board, depth);
+
+            Ok(())
+        },
+        _ => Err(CommandError::Malformed("invalid go command"))
+    }
+}
+
+fn parse_input(input: &str, board: &mut Board) -> Result<(), CommandError> {
     let command: Vec<&str> = input.split(' ').collect();
+    println!("{:?}", command);
     match command.get(0) {
         Some(&"fen") => handle_fen(command, board),
         Some(&"move") => handle_move(command, board),
+        Some(&"undo") => {
+            board.unmake();
+            Ok(())
+        },
         Some(&"debug") => handle_debug(command, board),
+        Some(&"board") => {
+            board_printer::print_board_ascii(board);
+            Ok(())
+        },
+        Some(&"go") => handle_go(command, board),
         None => Ok(()),
-        _ => Err(InputErr::Invalid(CmdParseErr(format!("invalid command"))))
+        _ => Err(CommandError::Invalid)
     }
 }

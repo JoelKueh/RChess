@@ -143,7 +143,7 @@ impl BoardDrawBuffer {
 //    let s: ColoredString = " ".on_custom_color(BOARDER);
 //}
 
-fn print_colored_board(board: &Board) {
+pub fn print_colored_board(board: &Board) {
     const BH: &str = "\u{2584}";
     const TH: &str = "\u{2580}";
     const LH: &str = "\u{258C}";
@@ -345,7 +345,7 @@ fn print_colored_board(board: &Board) {
 //    println!("{}", FILE_LINE);
 //}
 
-fn print_board_ascii(board: &Board) {
+pub fn print_board_ascii(board: &Board) {
     const SEPARATOR_LINE: &str  = "   +---+---+---+---+---+---+---+---+";
     const PIECE_LINE: [&str; 3] = [ "| ", " | ", " |"];
     const FILE_LINE: &str = "     A   B   C   D   E   F   G   H";
@@ -354,13 +354,13 @@ fn print_board_ascii(board: &Board) {
     println!("{}", SEPARATOR_LINE);
     let board_str = board.str_rep();
     for row in 0..8 as usize {
-        print!(" {} ", row + 1);
+        print!(" {} ", 8 - row);
         print!("{}", PIECE_LINE[0]);
         for col in 0..7 as usize {
             print!("{}{}", board_str[row][col], PIECE_LINE[1]);
         }
         print!("{}{}", board_str[row][7], PIECE_LINE[2]);
-        println!(" {}", row + 1);
+        println!(" {}", 8 - row);
         println!("{}", SEPARATOR_LINE);
     }
     println!("{}", FILE_LINE);
