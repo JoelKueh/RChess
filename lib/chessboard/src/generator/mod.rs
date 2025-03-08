@@ -88,7 +88,7 @@ impl MoveGenerator {
         let piece_type: u8 = board.type_at_sq(sq);
         let mut moves: u64 = self.gen_pseudo_move_mask(sq, piece_type,
             board.bitboard.occupancy, board.turn);
-        moves &= !board.bitboard.color[WHITE];
+        moves &= !board.bitboard.color[board.turn as usize];
 
         // Adjust the moves for pins and checks.
         moves &= if piece_type == KING as u8 { state.threats } else { !0x0 };
