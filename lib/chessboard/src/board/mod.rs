@@ -342,7 +342,7 @@ impl Board {
                 let pcolor: u8 = self.turn;
                 let cap_ptype: u8 = self.type_at_sq(to);
                 let cap_pcolor: u8 = self.enemy_color();
-                new_state.set_captured_piece(EMPTY as u8);
+                new_state.set_captured_piece(cap_ptype);
                 new_state.decay_castle_rights(self.turn, to, from);
                 self.replace_piece(to, ptype, pcolor, cap_ptype, cap_pcolor);
                 self.delete_piece(from, ptype, pcolor);
@@ -503,6 +503,7 @@ impl Board {
         let to: u8 = mv.get_to();
         let from: u8 = mv.get_from();
 
+        println!("{:?}", flags);
         match flags {
             QUIET | DOUBLE_PAWN_PUSH => {
                 let ptype: u8 = self.type_at_sq(to);
@@ -515,6 +516,10 @@ impl Board {
                 let pcolor: u8 = self.turn;
                 let cap_ptype: u8 = state.get_captured_piece();
                 let cap_pcolor: u8 = self.enemy_color();
+                println!("{:?}", ptype);
+                println!("{:?}", pcolor);
+                println!("{:?}", cap_ptype);
+                println!("{:?}", cap_pcolor);
                 self.write_piece(from, ptype, pcolor);
                 self.replace_piece(to, ptype, pcolor, cap_ptype, cap_pcolor);
             },

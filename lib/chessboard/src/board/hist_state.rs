@@ -101,7 +101,7 @@ impl HistState {
     /// Sets up this move state to hold a captured piece.
     pub fn set_captured_piece(&mut self, enp_col: u8) {
         self.data = (self.data & !ENP_COL) | ((enp_col << 5) as u16);
-        self.data |= ENP_AVAILABLE;
+        self.data &= !ENP_AVAILABLE;
     }
 
 

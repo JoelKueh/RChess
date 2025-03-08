@@ -230,9 +230,7 @@ impl MoveGenerator {
         // Append all of the moves to the list.
         while pieces != 0 {
             let sq = bitboard::pop_rbit(&mut pieces);
-            println!("{}", sq);
             let mut simple = self.gen_legal_mv_mask(sq, board, state);
-            println!("{}", simple);
             while simple != 0 {
                 let target: u8 = bitboard::pop_rbit(&mut simple);
                 let flag: u16 = if (1u64 << target) & board.bitboard.occupancy == 0 {
@@ -291,9 +289,9 @@ impl MoveGenerator {
         // Get the column of that enpassanet.
         let enemy_turn: usize = board.enemy_color() as usize;
         let enp_row_start: u8 = if board.turn as usize == WHITE {
-            mailbox::WHITE_MIN_ENPASSANT_TARGET
-        } else {
             mailbox::BLACK_MIN_ENPASSANT_TARGET
+        } else {
+            mailbox::WHITE_MIN_ENPASSANT_TARGET
         };
         let enp_sq: u8 = enp_row_start + extra.get_enp_col();
         let enemy_sq: i8 = enp_sq as i8 + if board.turn as usize == WHITE { 8 } else { -8 };
