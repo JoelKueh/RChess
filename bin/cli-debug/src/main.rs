@@ -7,8 +7,14 @@ use chessboard::moves::*;
 use std::io::stdin;
 use std::fmt;
 use std::error::Error;
+use std::process::exit;
 
 mod board_printer;
+mod perft_cli;
+
+// Information about the version and executable name.
+const NAME: &str = "RChess";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Debug)]
 enum CommandError {
@@ -60,13 +66,17 @@ fn print_mvlst(mvlst: &MoveList) {
 }
 
 fn main() {
+    // Print version information.
+    println!("{} version {} by Joel Kuehne", NAME, VERSION);
+
+    // Setup the initial state.
     const DEFAULT_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     let generator: MoveGenerator = MoveGenerator::new();
     let mut moves: MoveList = MoveList::new();
     let mut board: Board = Board::from_fen(DEFAULT_FEN).expect("Unexpected fen error");
-
     let state: BoardTables = generator.gen_board_tables(&board);
 
+    // Accept user commands.
     loop {
         let mut input: String = String::new();
         stdin().read_line(&mut input).expect("Input error");
@@ -76,15 +86,6 @@ fn main() {
             Ok(_) => ()
         }
     }
-}
-
-fn handle_fen(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
-    let Some(slice) = cmd.get(1..cmd.len()) else {
-        return Err(CommandError::Malformed("usage \"fen <FEN>\""));
-    };
-    let fen: String = slice.join(" ");
-    *board = Board::from_fen(&fen)?;
-    return Ok(())
 }
 
 fn handle_move(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
@@ -136,7 +137,7 @@ fn handle_go(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
             // Rust code can be so stupid at times.
             let depth: u32 = cmd.get(2).ok_or(MALFORMED)?
                 .parse::<u32>().ok().ok_or(MALFORMED)?;
-            perft::perft(board, depth);
+            perft_cli::perft(board, depth);
 
             Ok(())
         },
@@ -144,11 +145,29 @@ fn handle_go(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
     }
 }
 
+fn handle_position(cmd: Vec<&str>, board: &mut Board) -> Result<(), CommandError> {
+    match cmd.get(1) {
+        Some(&"fen") => {
+            const MALFORMED: CommandError
+                = CommandError::Malformed("usage \"position uci <FEN>\"");
+
+            // Rust code can be so stupid at times.
+            let Some(slice) = cmd.get(2..cmd.len()) else {
+                return Err(CommandError::Malformed("usage \"position uci <FEN>\""));
+            };
+            let uci: String = slice.join(" ");
+            *board = Board::from_uci(&uci)?;
+
+            Ok(())
+        }
+        _ => Err(CommandError::Malformed("invalid go command"))
+    }
+}
+
 fn parse_input(input: &str, board: &mut Board) -> Result<(), CommandError> {
     let command: Vec<&str> = input.split(' ').collect();
-    println!("{:?}", command);
     match command.get(0) {
-        Some(&"fen") => handle_fen(command, board),
+        Some(&"position") => handle_position(command, board),
         Some(&"move") => handle_move(command, board),
         Some(&"undo") => {
             board.unmake();
@@ -160,7 +179,9 @@ fn parse_input(input: &str, board: &mut Board) -> Result<(), CommandError> {
             Ok(())
         },
         Some(&"go") => handle_go(command, board),
+        Some(&"quit") => exit(0),
         None => Ok(()),
         _ => Err(CommandError::Invalid)
     }
 }
+

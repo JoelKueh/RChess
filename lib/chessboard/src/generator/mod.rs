@@ -6,7 +6,6 @@ use crate::moves::{*, MoveList};
 use std::fmt;
 
 mod tables;
-pub mod perft;
 
 #[cfg(test)]
 mod tests;
@@ -110,7 +109,7 @@ impl MoveGenerator {
         // Generate masks for attacking pawns moving left and right.
         let left_smear = bitboard::pawn_smear_left(pieces, board.turn);
         let mut left_attacks = left_smear & board.bitboard.color[board.enemy_color() as usize];
-        let right_smear = bitboard::pawn_smear_left(pieces, board.turn);
+        let right_smear = bitboard::pawn_smear_right(pieces, board.turn);
         let mut right_attacks = right_smear & board.bitboard.color[board.enemy_color() as usize];
 
         // Generate masks for moving pawns.

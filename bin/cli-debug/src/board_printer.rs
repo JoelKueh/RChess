@@ -1,7 +1,5 @@
 
 use chessboard::board::*;
-use const_format::formatcp;
-use chessboard::moves::*;
 use crossterm::style::{Color, Stylize};
 use colored::{Colorize, CustomColor, ColoredString};
 

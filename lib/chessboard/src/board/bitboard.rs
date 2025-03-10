@@ -2,7 +2,7 @@
 use crate::board::*;
 use bitintr::{Popcnt, Tzcnt};
 use std::fmt::Debug;
-use colored::{Colorize, ColoredString};
+use colored::{Colorize};
 
 pub const RIGHT_COL: u64        = 0x8080808080808080;
 pub const LEFT_COL: u64         = 0x0101010101010101;
@@ -154,9 +154,9 @@ pub fn pawn_smear_forward(pawns: u64, color: u8) -> u64 {
 
 pub fn pawn_smear_right(pawns: u64, color: u8) -> u64 {
     if color == WHITE as u8 {
-        (pawns >> 9 & !RIGHT_COL) | (pawns >> 7 & !LEFT_COL)
+        pawns >> 7 & !LEFT_COL
     } else {
-        (pawns << 7 & !RIGHT_COL) | (pawns << 9 & !LEFT_COL)
+        pawns << 9 & !LEFT_COL
     }
 }
 

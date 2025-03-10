@@ -4,6 +4,7 @@
 use std::error::Error;
 use crate::moves::*;
 use std::fmt;
+use crate::generator::*;
 
 pub mod bitboard;
 pub mod mailbox;
@@ -57,16 +58,14 @@ pub struct BoardHistory {
 #[derive(Clone, Debug)]
 pub enum ParseError {
     Malformed(&'static str),
-    InvalidMove(&'static str),
-    IllegalMove(Move)
+    InvalidMove(MoveError)
 }
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Malformed(context) => write!(f, "malformed string: {}", context),
-            Self::InvalidMove(mv_str) => write!(f, "invalid move: {}", mv_str),
-            Self::IllegalMove(mv) => write!(f, "illegal move: {}", mv.to_long_algbr())
+            Self::InvalidMove(mv_err) => write!(f, "{}", mv_err)
         }
     }
 }
@@ -99,7 +98,7 @@ impl Board {
         let fullmv: &str = fen_split.next().ok_or(TOO_SHORT)?;
 
         // Verify the length requirements of the fen string pieces.
-        if turn.len() != 1 { return Err(ParseError::Malformed("pieces too short")); }
+        if turn.len() != 1 { return Err(ParseError::Malformed("turn too short")); }
         if rights.len() < 1 || rights.len() > 4 {
             return Err(ParseError::Malformed("rights too short"));
         }
@@ -212,7 +211,55 @@ impl Board {
     }
 
     pub fn from_uci(uci: &str) -> Result<Self, ParseError> {
-        todo!()
+        let mut uci_split: Vec<&str> = uci.trim().split("moves").collect();
+        println!("SPLIT: {:?}", uci_split);
+
+        if uci_split.len() == 0 {
+            const TOO_FEW_PARTS: ParseError = ParseError::Malformed("too few parts");
+            return Err(TOO_FEW_PARTS);
+        }
+
+        // If the split's length is one, we only have to parse the fen part.
+        if uci_split.len() == 1 {
+            uci_split[0] = uci_split[0].trim();
+            return Self::from_fen(uci);
+        }
+
+        // If the split's length is greater than two, we have a problem.
+        if uci_split.len() > 2 {
+            const TOO_MANY_PARTS: ParseError = ParseError::Malformed("too many parts");
+            return Err(TOO_MANY_PARTS);
+        }
+
+        // Otherwise we start by gettting the Fen part, then we parse the move list.
+        let mut board: Board = Self::from_fen(uci_split[0])?;
+
+        // Parse the move list.
+        uci_split[1] = uci_split[1].trim();
+        let move_split = uci_split[1].split(" ");
+        let gen: MoveGenerator = MoveGenerator::new();
+        let mut mvlst: MoveList = MoveList::new();
+        for move_str in move_split {
+            // Skip all empty strings
+            if move_str == "" {
+                continue;
+            }
+
+            // Generate the board state and move list.
+            let state = gen.gen_board_tables(&board);
+            gen.gen_moves(&mut mvlst, &board, &state);
+
+            // Match supplied moves to elements of the list.
+            let mv: Move = match Move::from_uci_algbr(move_str, &mvlst) {
+                Ok(mv) => mv,
+                Err(err) => return Err(ParseError::InvalidMove(err))
+            };
+            
+            // Make the move and continue.
+            board.make(&mv);
+        }
+        
+        return Ok(board);
     }
 
     pub fn str_rep(&self) -> Box<[[char; 8]; 8]> {
@@ -503,7 +550,6 @@ impl Board {
         let to: u8 = mv.get_to();
         let from: u8 = mv.get_from();
 
-        println!("{:?}", flags);
         match flags {
             QUIET | DOUBLE_PAWN_PUSH => {
                 let ptype: u8 = self.type_at_sq(to);
@@ -516,12 +562,8 @@ impl Board {
                 let pcolor: u8 = self.turn;
                 let cap_ptype: u8 = state.get_captured_piece();
                 let cap_pcolor: u8 = self.enemy_color();
-                println!("{:?}", ptype);
-                println!("{:?}", pcolor);
-                println!("{:?}", cap_ptype);
-                println!("{:?}", cap_pcolor);
                 self.write_piece(from, ptype, pcolor);
-                self.replace_piece(to, ptype, pcolor, cap_ptype, cap_pcolor);
+                self.replace_piece(to, cap_ptype, cap_pcolor, ptype, pcolor);
             },
             KING_SIDE_CASTLE => {
                 let king_from: u8 = if self.turn as usize == WHITE {
@@ -608,25 +650,25 @@ impl Board {
             KNIGHT_PROMO_CAPTURE => {
                 let cap_ptype: u8 = state.get_captured_piece();
                 let cap_pcolor: u8 = self.enemy_color();
-                self.replace_piece(to, KNIGHT as u8, self.turn, cap_ptype, cap_pcolor);
+                self.replace_piece(to, cap_ptype, cap_pcolor, KNIGHT as u8, self.turn);
                 self.write_piece(from, PAWN as u8, self.turn);
             },
             BISHOP_PROMO_CAPTURE => {
                 let cap_ptype: u8 = state.get_captured_piece();
                 let cap_pcolor: u8 = self.enemy_color();
-                self.replace_piece(to, BISHOP as u8, self.turn, cap_ptype, cap_pcolor);
+                self.replace_piece(to, cap_ptype, cap_pcolor, BISHOP as u8, self.turn);
                 self.write_piece(from, PAWN as u8, self.turn);
             },
             ROOK_PROMO_CAPTURE => {
                 let cap_ptype: u8 = state.get_captured_piece();
                 let cap_pcolor: u8 = self.enemy_color();
-                self.replace_piece(to, ROOK as u8, self.turn, cap_ptype, cap_pcolor);
+                self.replace_piece(to, cap_ptype, cap_pcolor, ROOK as u8, self.turn);
                 self.write_piece(from, PAWN as u8, self.turn);
             },
             QUEEN_PROMO_CAPTURE => {
                 let cap_ptype: u8 = state.get_captured_piece();
                 let cap_pcolor: u8 = self.enemy_color();
-                self.replace_piece(to, QUEEN as u8, self.turn, cap_ptype, cap_pcolor);
+                self.replace_piece(to, cap_ptype, cap_pcolor, QUEEN as u8, self.turn);
                 self.write_piece(from, PAWN as u8, self.turn);
             },
             _ => {

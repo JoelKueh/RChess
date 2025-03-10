@@ -1,5 +1,5 @@
 
-#![allow(unused_variables, dead_code)]
+#![allow(unused_variables, unused_assignments, dead_code)]
 
 use crate::board;
 use std::fmt;
@@ -218,7 +218,7 @@ impl Move {
     }
 
     /// Builds the move from a FIDE algebraic string representation of the move.
-    pub fn from_short_algbr(algbr: &str, moves: &MoveList) {
+    pub fn from_short_algbr(algbr: &str, moves: &MoveList) -> Result<Move, MoveError> {
         let piece: u8 = match algbr.as_bytes()[0 as usize] as char {
             'N' => board::KNIGHT as u8,
             'B' => board::BISHOP as u8,
@@ -238,6 +238,7 @@ impl Move {
 
         flag += if algbr.contains('x') { 4 } else { 0 };
 
+        // TODO: FIX AND REMOVE ME
         todo!();
     }
 

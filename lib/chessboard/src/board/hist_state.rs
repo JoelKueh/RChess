@@ -78,12 +78,12 @@ impl HistState {
 
     /// Gets the column of an enpassant.
     pub fn get_enp_col(&self) -> u8 {
-        return (self.data & ENP_COL >> 5) as u8;
+        return ((self.data & ENP_COL) >> 5) as u8;
     }
 
     /// Gets the piece type of the captured piece as defined in bitboard.
     pub fn get_captured_piece(&self) -> u8 {
-        return (self.data & ENP_COL >> 5) as u8;
+        return ((self.data & ENP_COL) >> 5) as u8;
     }
 
 

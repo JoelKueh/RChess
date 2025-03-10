@@ -5,7 +5,7 @@ local function toBits(num)
 	for i = 1, 8 do
 		local b = bit.band(num, 1)
 		bits[i] = b
-		num = bit.arshift(num, 1)
+		num = bit.rshift(num, 1)
 	end
 
 	return bits
@@ -20,6 +20,7 @@ end
 
 local num = tonumber(arg[1], 10)
 for b = 1, 8 do
+	print(num)
 	printBits(toBits(bit.band(num, 0xFF)))
-	num = bit.arshift(num, 8)
+	num = bit.rshift(num, 8)
 end
