@@ -10,6 +10,16 @@ mod tables;
 #[cfg(test)]
 mod tests;
 
+// TODO: Move later I'm lazy. This is also in "tables::normal".
+pub const DIR_R: u8     = 0;
+pub const DIR_UR: u8    = 1;
+pub const DIR_U: u8     = 2;
+pub const DIR_UL: u8    = 3;
+pub const DIR_L: u8     = 4;
+pub const DIR_DL: u8    = 5;
+pub const DIR_D: u8     = 6;
+pub const DIR_DR: u8    = 7;
+
 #[derive(Default)]
 pub struct BoardTables {
     pub threats: u64,
@@ -90,7 +100,7 @@ impl MoveGenerator {
         moves &= !board.bitboard.color[board.turn as usize];
 
         // Adjust the moves for pins and checks.
-        moves &= if piece_type == KING as u8 { state.threats } else { !0x0 };
+        moves &= if piece_type == KING as u8 { !state.threats } else { !0x0 };
         moves = MoveGenerator::pin_adjust(sq, moves, state);
         moves &= state.check_blocks;
         
@@ -104,7 +114,9 @@ impl MoveGenerator {
         state: &BoardTables
     ) {
         // Get the mask of pawns that we want to move.
-        let pieces = board.bitboard.piece[board.turn as usize][PAWN];
+        let mut pieces = board.bitboard.piece[board.turn as usize][PAWN];
+        let pinned = pieces & state.pins[8];
+        pieces ^= pinned;
 
         // Generate masks for attacking pawns moving left and right.
         let left_smear = bitboard::pawn_smear_left(pieces, board.turn);
@@ -133,6 +145,8 @@ impl MoveGenerator {
         let forward_promos = left_attacks & bitboard::TOP_ROW & bitboard::BOTTOM_ROW;
         forward_moves ^= forward_promos;
 
+        // Adjust for checks.
+
         // Turn the pushes into actual appended moves.
         self.append_pushes(board, move_list, forward_moves);
         self.append_left_attacks(board, move_list, left_attacks);
@@ -141,6 +155,61 @@ impl MoveGenerator {
         self.append_left_promos(board, move_list, left_promos);
         self.append_right_promos(board, move_list, right_promos);
         self.append_forward_promos(board, move_list, forward_promos);
+
+        // Append moves for pinned pawns.
+        self.append_pinned_pawn_moves(board, move_list, pinned, state);
+    }
+
+    fn append_pinned_pawn_moves(&self, board: &Board, move_list: &mut MoveList, mut pinned: u64,
+        state: &BoardTables
+    ) {
+        let enemy: u64 = board.bitboard.color[board.enemy_color() as usize];
+        let occupancy: u64 = board.bitboard.occupancy;
+
+        while pinned != 0 {
+            // TODO: This could possibly be made faster.
+
+            // Get the square we want to look at.
+            let sq: u8 = bitboard::pop_rbit(&mut pinned);
+
+            // Get the different targets.
+            let lsq: u8 = (sq as i8
+                + if board.turn == WHITE as u8 { -9 } else { 9 } as i8) as u8;
+            let rsq: u8 = (sq as i8
+                + if board.turn == WHITE as u8 { -7 } else { 7 } as i8) as u8;
+            let fsq: u8 = (sq as i8
+                + if board.turn == WHITE as u8 { -8 } else { 8 } as i8) as u8;
+            let dsq: u8 = (sq as i8
+                + if board.turn == WHITE as u8 { -16 } else { 16 } as i8) as u8;
+
+            // Get the different targets.
+            let pinmsk: u64 = Self::get_pin_mask(sq, state);
+            let lmsk: u64 = (1u64 << lsq) & pinmsk;
+            let rmsk: u64 = (1u64 << rsq) & pinmsk;
+            let fmsk: u64 = (1u64 << fsq) & pinmsk;
+            let dmsk: u64 = (1u64 << dsq) & pinmsk;
+
+            // Append the legal moves.
+            if enemy & lmsk != 0 {
+                move_list.push(Move::new(sq as u16, lsq as u16, CAPTURE));
+            }
+
+            if enemy & rmsk != 0 {
+                move_list.push(Move::new(sq as u16, rsq as u16, CAPTURE));
+            }
+
+            if !occupancy & fmsk != 0 {
+                move_list.push(Move::new(sq as u16, fsq as u16, CAPTURE));
+                let pawn_line: u64 = if board.turn == WHITE as u8 {
+                    bitboard::WHITE_PAWN_LINE
+                } else {
+                    bitboard::BLACK_PAWN_LINE
+                };
+                if !occupancy & dmsk & pawn_line != 0 {
+                    move_list.push(Move::new(sq as u16, dsq as u16, DOUBLE_PAWN_PUSH));
+                }
+            }
+        }
     }
     
     fn append_pushes(&self, board: &Board, move_list: &mut MoveList, mut pushes: u64) {
@@ -165,7 +234,7 @@ impl MoveGenerator {
         while attacks != 0 {
             let target: u8 = bitboard::pop_rbit(&mut attacks);
             let sq: u8 = (target as i8
-                + if board.turn == WHITE as u8 { 9 } else { -7 } as i8) as u8;
+                + if board.turn == WHITE as u8 { 9 } else { -9 } as i8) as u8;
             move_list.push(Move::new(sq as u16, target as u16, CAPTURE))
         }
     }
@@ -174,7 +243,7 @@ impl MoveGenerator {
         while attacks != 0 {
             let target: u8 = bitboard::pop_rbit(&mut attacks);
             let sq: u8 = (target as i8
-                + if board.turn == WHITE as u8 { 7 } else { -9 } as i8) as u8;
+                + if board.turn == WHITE as u8 { 7 } else { -7 } as i8) as u8;
             move_list.push(Move::new(sq as u16, target as u16, CAPTURE))
         }
     }
@@ -183,7 +252,7 @@ impl MoveGenerator {
         while promos != 0 {
             let target: u8 = bitboard::pop_rbit(&mut promos);
             let sq: u8 = (target as i8
-                + if board.turn == WHITE as u8 { 9 } else { -7 } as i8) as u8;
+                + if board.turn == WHITE as u8 { 9 } else { -9 } as i8) as u8;
             move_list.push(Move::new(sq as u16, target as u16, KNIGHT_PROMO_CAPTURE));
             move_list.push(Move::new(sq as u16, target as u16, BISHOP_PROMO_CAPTURE));
             move_list.push(Move::new(sq as u16, target as u16, ROOK_PROMO_CAPTURE));
@@ -195,7 +264,7 @@ impl MoveGenerator {
         while promos != 0 {
             let target: u8 = bitboard::pop_rbit(&mut promos);
             let sq: u8 = (target as i8
-                + if board.turn == WHITE as u8 { 7 } else { -9 } as i8) as u8;
+                + if board.turn == WHITE as u8 { 7 } else { -7 } as i8) as u8;
             move_list.push(Move::new(sq as u16, target as u16, KNIGHT_PROMO_CAPTURE));
             move_list.push(Move::new(sq as u16, target as u16, BISHOP_PROMO_CAPTURE));
             move_list.push(Move::new(sq as u16, target as u16, ROOK_PROMO_CAPTURE));
@@ -526,44 +595,42 @@ impl MoveGenerator {
         let king = board.bitboard.piece[board.turn as usize][board::KING];
         let king_sq: u8 = bitboard::peek_rbit(&king);
         let check_sq: u8 = bitboard::peek_rbit(&checks);
-        let check_blocks: u64 = checks | self.tables.read_to_from_table(king_sq, check_sq);
+        let check_blocks: u64 = self.tables.read_to_from_table(check_sq, king_sq);
 
         return check_blocks;
     }
 
     fn gen_pins(&self, board: &Board) -> [u64; 9] {
-        // TODO: Maybe this will be faster without the union of the pins board.
+        // NOTE: Maybe this will be faster without the union of the pins board.
         let mut pins: [u64; 9] = [0; 9];
         let king: u64 = board.bitboard.piece[board.turn as usize][board::KING];
         let king_sq: u8 = bitboard::peek_rbit(&king);
 
-        let mut i = 0;
         let occupancy: u64 = board.bitboard.occupancy;
         let blockers: u64 = board.bitboard.color[board.turn as usize];
 
-        // TODO: REMOVE ME
         let mut pinner: u64 = self.xray_rook_attacks(occupancy, blockers, king_sq)
             & (board.bitboard.piece[board.enemy_color() as usize][ROOK]
                 | board.bitboard.piece[board.enemy_color() as usize][QUEEN]);
         while pinner != 0 {
             let sq: u8 = bitboard::pop_rbit(&mut pinner);
-            pins[i] = self.tables.read_to_from_table(king_sq, sq);
-            pins[8] ^= pins[i];
-            i += 1;
+            let dir = self.tables.read_ray_direction(king_sq, sq);
+            let mask = self.tables.read_to_from_table(sq, king_sq);
+            pins[dir as usize] = mask;
+            pins[8] ^= mask;
         }
 
         let mut pinner: u64 = self.xray_bishop_attacks(occupancy, blockers, king_sq)
             & (board.bitboard.piece[board.enemy_color() as usize][BISHOP]
                 | board.bitboard.piece[board.enemy_color() as usize][QUEEN]);
-        i = 0;
         while pinner != 0 {
             let sq: u8 = bitboard::pop_rbit(&mut pinner);
-            pins[i] = self.tables.read_to_from_table(king_sq, sq);
-            pins[8] ^= pins[i];
-            i += 1;
+            let dir = self.tables.read_ray_direction(king_sq, sq);
+            let mask = self.tables.read_to_from_table(sq, king_sq);
+            pins[dir as usize] = mask;
+            pins[8] ^= mask;
         }
 
-        pins[8] &= !(1u64 << king_sq);
         return pins;
     }
 
@@ -574,9 +641,9 @@ impl MoveGenerator {
     }
 
     fn xray_bishop_attacks(&self, occupancy: u64, mut blockers: u64, sq: u8) -> u64 {
-        let attacks = self.tables.read_rook_attacks(sq, occupancy);
+        let attacks = self.tables.read_bishop_attacks(sq, occupancy);
         blockers &= attacks;
-        return attacks ^ self.tables.read_rook_attacks(sq, occupancy ^ blockers);
+        return attacks ^ self.tables.read_bishop_attacks(sq, occupancy ^ blockers);
     }
     
     fn get_pin_mask(sq: u8, state: &BoardTables) -> u64 {

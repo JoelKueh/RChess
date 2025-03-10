@@ -7,6 +7,16 @@ mod magical;
 #[cfg(test)]
 mod tests;
 
+// TODO: Move later I'm lazy. This is also in "normal".
+pub const DIR_R: u8     = 0;
+pub const DIR_UR: u8    = 1;
+pub const DIR_U: u8     = 2;
+pub const DIR_UL: u8    = 3;
+pub const DIR_L: u8     = 4;
+pub const DIR_DL: u8    = 5;
+pub const DIR_D: u8     = 6;
+pub const DIR_DR: u8    = 7;
+
 pub struct MoveTables {
     pawn_attacks: [[u64; 64]; 2],
     knight_attacks: [u64; 64],
@@ -55,6 +65,10 @@ impl MoveTables {
 
     pub fn read_to_from_table(&self, sq1: u8, sq2: u8) -> u64 {
         return self.to_from_table[sq1 as usize][sq2 as usize];
+    }
+
+    pub fn read_ray_direction(&self, sq1: u8, sq2: u8) -> u8 {
+        return normal::get_ray_direction(sq1, sq2);
     }
 }
 

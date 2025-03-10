@@ -140,7 +140,7 @@ pub fn pawn_smear_left(pawns: u64, color: u8) -> u64 {
     if color == WHITE as u8 {
         pawns >> 9 & !RIGHT_COL
     } else {
-        pawns << 7 & !RIGHT_COL
+        pawns << 9 & !LEFT_COL
     }
 }
 
@@ -156,7 +156,7 @@ pub fn pawn_smear_right(pawns: u64, color: u8) -> u64 {
     if color == WHITE as u8 {
         pawns >> 7 & !LEFT_COL
     } else {
-        pawns << 9 & !LEFT_COL
+        pawns << 7 & !RIGHT_COL
     }
 }
 

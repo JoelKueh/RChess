@@ -1,3 +1,4 @@
+#!/usr/bin/python
 
 # This script recursively calls cli_debug and stockfish to compare the results
 # of a perft at a specified position.
@@ -46,6 +47,10 @@ def perft_get_counts(driver, fen, depth, moves):
     return counts
 
 
+# Compile the release version of the code.
+comp_command = f"cd {root_dir}; cargo build --release"
+compiler = subprocess.run(comp_command, shell=True)
+
 moves = []
 while True:
     # Reset the missing and extra arrays.
@@ -91,6 +96,8 @@ while True:
             extra[key] = ""
         if key not in wrong:
             wrong[key] = ""
+        if key not in fish_counts:
+            fish_counts[key] = ""
         print(f"{key:10}{fish_counts[key]:10}{extra[key]:10}", end="")
         print(f"{wrong[key]:10}{missing[key]:10}")
     print()
@@ -109,8 +116,10 @@ if len(keys) == 0:
 
 # Print the moves that don't match.
 for key in keys:
-    if key in fish_counts:
+    if fish_counts[key] != "":
         print("Missing: ", end="")
+    else:
+        print("Extra: ", end="")
     for move in moves:
         print(move + " ", end="")
     print(key)

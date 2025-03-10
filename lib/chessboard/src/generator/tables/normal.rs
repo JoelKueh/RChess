@@ -1,6 +1,15 @@
 
 use crate::board::bitboard;
 
+pub const DIR_R: u8     = 0;
+pub const DIR_UR: u8    = 1;
+pub const DIR_U: u8     = 2;
+pub const DIR_UL: u8    = 3;
+pub const DIR_L: u8     = 4;
+pub const DIR_DL: u8    = 5;
+pub const DIR_D: u8     = 6;
+pub const DIR_DR: u8    = 7;
+
 pub fn gen_pawn_attack_table() -> [[u64; 64]; 2] {
     // Offsets of pawn moves from a source square.
     const SQ_OFFSET: [[i8; 2]; 2] = [[ 7, 9 ], [ -7, -9 ]];
@@ -34,16 +43,41 @@ pub fn gen_to_from_table() -> [[u64; 64]; 64] {
     return table;
 }
 
-fn get_connecting_ray(sq1: u8, sq2: u8) -> u64 {
-    let sq1_rank: u8 = sq1 % 8;
-    let sq1_file: u8 = sq1 / 8;
-    let sq2_rank: u8 = sq1 % 8;
-    let sq2_file: u8 = sq1 / 8;
+pub fn get_ray_direction(sq1: u8, sq2: u8) -> u8 {
+    let sq1_rank: i8 = sq1 as i8 / 8;
+    let sq1_file: i8 = sq1 as i8 % 8;
+    let sq2_rank: i8 = sq2 as i8 / 8;
+    let sq2_file: i8 = sq2 as i8 % 8;
 
+    let sq: i8 = sq1.try_into().unwrap();
+    let mask: u64 = 0;
+    let direction: u8 = if sq1_rank == sq2_rank {
+        if sq1 < sq2 { DIR_R } else { DIR_L }
+    } else if sq1_file == sq2_file {
+        if sq1 < sq2 { DIR_D } else { DIR_U }
+    } else if sq1_file + sq1_rank == sq2_file + sq2_rank {
+        if sq1 < sq2 { DIR_DL } else { DIR_UR }
+    } else if sq1_file - sq1_rank == sq2_file - sq2_rank {
+        if sq1 < sq2 { DIR_DR } else { DIR_UL }
+    } else {
+        panic!("Get ray direction called on a non-ray!");
+    };
+
+    return direction;
+}
+
+fn get_connecting_ray(sq1: u8, sq2: u8) -> u64 {
+    let sq1_rank: i8 = sq1 as i8 / 8;
+    let sq1_file: i8 = sq1 as i8 % 8;
+    let sq2_rank: i8 = sq2 as i8 / 8;
+    let sq2_file: i8 = sq2 as i8 % 8;
+
+    // If the squares are equal, just set to 1 and quit.
     if sq1 == sq2 {
         return 1u64 << sq1;
     }
 
+    // Find the direction of the ray.
     let mut sq: i8 = sq1.try_into().unwrap();
     let mut mask: u64 = 0;
     let direction: i8 = if sq1_rank == sq2_rank {
@@ -58,11 +92,11 @@ fn get_connecting_ray(sq1: u8, sq2: u8) -> u64 {
         return 0;
     };
 
+    // Slide along the ray until we reach the destination square.
     while <i8 as TryInto<u8>>::try_into(sq).unwrap() != sq2 {
         mask |= 1u64 << sq;
         sq += direction;
     }
-    mask |= 1u64 << sq1;
 
     return mask;
 }
